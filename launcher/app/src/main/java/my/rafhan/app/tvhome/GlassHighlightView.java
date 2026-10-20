@@ -54,7 +54,33 @@ public final class GlassHighlightView extends View implements Choreographer.Fram
     }
 
     /** Moves the highlight to {@code r} (in this view's coordinates). */
+    // The spring runs in the coordinates of the content it's on ("frame"): the sliding page, or
+    // the scrolling grid inside it. offsetY is where that frame currently is on screen, so page
+    // slides and grid scrolls carry the highlight rigidly instead of the spring chasing them
+    // (which overshot when moving between the dock and the app list).
+    private int frame = -1;
+    private float offsetY;
+
+    /**
+     * Sets the frame the next target is in and its current on-screen offset. Switching frames
+     * converts the current position so nothing jumps.
+     */
+    public void setFrame(int id, float offset) {
+        if (id != frame && frame != -1) {
+            float d = offsetY - offset;
+            cur[1] += d;
+            cur[3] += d;
+        }
+        frame = id;
+        if (offset != offsetY) {
+            offsetY = offset;
+            invalidate();
+        }
+    }
+
+    /** {@code r} in screen coordinates; stored relative to the current frame. */
     public void moveTo(RectF r, float radius, boolean snap) {
+        r = new RectF(r.left, r.top - offsetY, r.right, r.bottom - offsetY);
         float[] next = {r.left, r.top, r.right, r.bottom, radius};
         boolean changed = false;
         for (int i = 0; i < 5; i++) {
@@ -105,6 +131,8 @@ public final class GlassHighlightView extends View implements Choreographer.Fram
     protected void onDraw(Canvas canvas) {
         if (!placed) return;
         float r = cur[4];
+        canvas.save();
+        canvas.translate(0, offsetY);
         rect.set(cur[0], cur[1], cur[2], cur[3]);
         rect.inset(-2.5f * dp, -2.5f * dp);
         canvas.drawRoundRect(rect, r + 2.5f * dp, r + 2.5f * dp, halo);
@@ -116,6 +144,7 @@ public final class GlassHighlightView extends View implements Choreographer.Fram
         canvas.drawRoundRect(rect, r, r, sheen);
         rect.inset(0.75f * dp, 0.75f * dp);
         canvas.drawRoundRect(rect, r, r, edge);
+        canvas.restore();
     }
 
     @Override

@@ -115,6 +115,9 @@ public class MainActivity extends Activity {
 
     private int section = DOCK, topIdx, dockIdx, gridIdx, menuIdx, nowIdx;
     private int gridScroll;
+    // Where the grid's scroll is heading (scrollGridToRow / return home); the highlight is placed
+    // against this, so it goes straight to its final spot while the list scrolls under it.
+    private int gridScrollTarget;
     private int armedKey = KeyEvent.KEYCODE_UNKNOWN;
     private boolean resumed;
     private long wallpaperStamp = -1;
@@ -513,7 +516,10 @@ public class MainActivity extends Activity {
                     .setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
             setHomeVisible(newSection != GRID, true);
             // Back on the home screen the peek shows the first row again.
-            if (newSection != GRID && gridScroll != 0) grid.smoothScrollBy(0, -gridScroll, new DecelerateInterpolator(2f));
+            if (newSection != GRID && gridScroll != 0) {
+                gridScrollTarget = 0;
+                grid.smoothScrollBy(0, -gridScroll, new DecelerateInterpolator(2f));
+            }
             system.setVisible(newSection != GRID);
             nowPlaying.setVisible(newSection != GRID);
         }
@@ -593,6 +599,7 @@ public class MainActivity extends Activity {
         int max = Math.max(0, content - grid.getHeight());
         // Keep one row of context above the focused row.
         int target = Math.max(0, Math.min(max, (row - 1) * px(ROW_PITCH)));
+        gridScrollTarget = target;
         int dy = target - gridScroll;
         if (dy == 0) return;
         if (smooth) grid.smoothScrollBy(0, dy, new DecelerateInterpolator(1.5f));
@@ -629,12 +636,19 @@ public class MainActivity extends Activity {
                 break;
         }
         if (v == null || v.getWidth() == 0) return;
+        // Frame the highlight rides with: the menu (fixed), the grid (page slide + list scroll),
+        // or the rest of the page (page slide).
+        if (section == MENU) highlight.setFrame(0, 0);
+        else if (section == GRID) highlight.setFrame(2 + gridScrollTarget, page.getTranslationY() - gridScrollTarget);
+        else highlight.setFrame(1, page.getTranslationY());
         highlight.getLocationInWindow(loc);
         int ox = loc[0], oy = loc[1];
         v.getLocationInWindow(loc);
         float cs = v.getScaleX();
         float cx = loc[0] - ox + v.getWidth() * cs / 2f;
         float cy = loc[1] - oy + v.getHeight() * cs / 2f;
+        // Grid: where the tile will be once the scroll in progress finishes.
+        if (section == GRID) cy += gridScroll - gridScrollTarget;
         float hw = v.getWidth() * scale / 2f, hh = v.getHeight() * scale / 2f;
         highlight.moveTo(new RectF(cx - hw, cy - hh, cx + hw, cy + hh), radius, snap);
     }
