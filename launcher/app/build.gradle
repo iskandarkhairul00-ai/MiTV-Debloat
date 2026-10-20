@@ -1,0 +1,27 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'my.rafhan.app.tvhome'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'my.rafhan.app.tvhome'
+        minSdk 29          // the Mi TV runs Android 10
+        targetSdk 36       // some Google TV 14 sets refuse old targets at install
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    // Loopback ADB client for the phone remote (D-pad and typing in any app while USB debugging is on).
+    implementation 'dev.mobile:dadb:1.2.10'
+}

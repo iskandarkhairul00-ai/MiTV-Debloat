@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phone remote "Open on TV": any file the Files tab can browse (internal storage and USB
+     volumes under /storage). FileApi only hands out paths inside those roots. -->
+<paths>
+    <root-path name="root" path="/" />
+</paths>

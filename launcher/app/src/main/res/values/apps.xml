@@ -1,0 +1,12 @@
+<resources>
+    <!-- System apps that only have a phone (LAUNCHER) entry are hidden from the grid because on
+         this TV they are setup leftovers. List the ones you do want to see here. -->
+    <string-array name="extra_system_apps">
+        <item>com.android.deskclock</item>
+    </string-array>
+    <!-- Not ranked as "used": no time on the Most used card or in its total, and kept in A-Z
+         order in the grid. Live TV only displays HDMI/AV/antenna, so its time is input time. -->
+    <string-array name="usage_excluded">
+        <item>com.mediatek.wwtv.tvcenter</item>
+    </string-array>
+</resources>

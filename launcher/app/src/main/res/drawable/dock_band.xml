@@ -1,0 +1,5 @@
+<!-- Translucent so the ambient glow and an optional wallpaper show through. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#17FFFFFF" />
+    <corners android:radius="30dp" />
+</shape>

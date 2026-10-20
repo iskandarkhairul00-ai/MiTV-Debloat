@@ -1,0 +1,11 @@
+<resources>
+    <!-- Default dock, left to right. Override without rebuilding by pushing a dock.txt
+         (one package per line) - see README.md. -->
+    <string-array name="dock_packages">
+        <item>com.netflix.ninja</item>
+        <item>my.rafhan.app.radiostream</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>com.community.mbox.tv</item>
+        <item>my.gov.rtm.tv</item>
+    </string-array>
+</resources>

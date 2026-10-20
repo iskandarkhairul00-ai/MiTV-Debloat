@@ -1,0 +1,6 @@
+<!-- "Glass" without blur: a dark, nearly opaque panel with a light hairline edge. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#EB232326" />
+    <stroke android:width="1dp" android:color="#2EFFFFFF" />
+    <corners android:radius="18dp" />
+</shape>

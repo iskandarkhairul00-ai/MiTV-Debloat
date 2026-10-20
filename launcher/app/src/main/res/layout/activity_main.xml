@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vertical positions are set in MainActivity.layoutPage() from the real screen height.
+     Nothing here is focusable: MainActivity drives focus itself so D-pad moves are deterministic. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <ImageView
+        android:id="@+id/wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- Two screens tall: home (clock, dock) on top, the app grid underneath. Slides up on Down.
+         Keeps clipChildren on: that is what clips grid rows scrolled above the grid's top edge. -->
+    <FrameLayout
+        android:id="@+id/page"
+        android:layout_width="match_parent"
+        android:layout_height="1040dp">
+
+        <!-- Square radial gradient squashed into an ellipse, so its edges fade out cleanly. -->
+        <View
+            android:id="@+id/glow"
+            android:layout_width="820dp"
+            android:layout_height="820dp"
+            android:layout_gravity="top|center_horizontal"
+            android:scaleY="0.4" />
+
+        <!-- Top band: big clock, then the Gregorian and Hijri dates stacked to its right. -->
+        <LinearLayout
+            android:id="@+id/clockBlock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="64dp"
+            android:layout_marginTop="28dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.02"
+                android:textColor="#FFFFFF"
+                android:textSize="64sp" />
+
+            <!-- Centred on the clock digits in MainActivity.centreDatesOnClock(). -->
+            <LinearLayout
+                android:id="@+id/dateCol"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/date"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#D9FFFFFF"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/hijri"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:textColor="#8CFFFFFF"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Left cards: prayer times (top level with the system card), then most used apps. -->
+        <LinearLayout
+            android:layout_width="390dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="64dp"
+            android:layout_marginTop="104dp"
+            android:orientation="vertical">
+
+            <!-- Filled by PrayerPanel. -->
+            <LinearLayout
+                android:id="@+id/prayerPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/sys_bg"
+                android:orientation="vertical"
+                android:paddingStart="14dp"
+                android:paddingTop="11dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="12dp" />
+
+            <!-- Filled by UsagePanel. -->
+            <LinearLayout
+                android:id="@+id/usagePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/sys_bg"
+                android:orientation="vertical"
+                android:paddingStart="14dp"
+                android:paddingTop="11dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/pills"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="58dp"
+            android:layout_marginTop="38dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:padding="6dp">
+
+            <TextView android:id="@+id/pillInputs" android:text="@string/inputs" style="@style/Pill" />
+            <TextView android:id="@+id/pillWifi" android:text="@string/wifi" style="@style/Pill" />
+            <TextView android:id="@+id/pillSettings" android:text="@string/settings" style="@style/Pill" />
+        </LinearLayout>
+
+        <!-- System stats card, filled by SystemPanel. -->
+        <LinearLayout
+            android:id="@+id/sysPanel"
+            android:layout_width="410dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="64dp"
+            android:layout_marginTop="104dp"
+            android:background="@drawable/sys_bg"
+            android:orientation="vertical"
+            android:paddingStart="14dp"
+            android:paddingTop="11dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:id="@+id/hero"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_gravity="top"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:singleLine="true"
+            android:textColor="#F2FFFFFF"
+            android:textSize="46sp" />
+
+        <FrameLayout
+            android:id="@+id/dockBand"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:background="@drawable/dock_band"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingStart="16dp"
+            android:paddingTop="22dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="22dp">
+
+            <LinearLayout
+                android:id="@+id/dockRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:orientation="horizontal" />
+        </FrameLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/grid"
+            android:layout_width="match_parent"
+            android:layout_height="500dp"
+            android:layout_gravity="top"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:focusable="false"
+            android:overScrollMode="never"
+            android:scrollbars="none" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/menu"
+        android:layout_width="240dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:background="@drawable/menu_bg"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone" />
+
+    <my.rafhan.app.tvhome.GlassHighlightView
+        android:id="@+id/highlight"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>
