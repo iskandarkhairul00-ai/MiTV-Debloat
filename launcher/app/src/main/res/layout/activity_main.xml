@@ -145,13 +145,13 @@
         <TextView
             android:id="@+id/hero"
             android:layout_width="match_parent"
-            android:layout_height="72dp"
+            android:layout_height="54dp"
             android:layout_gravity="top"
             android:ellipsize="end"
             android:gravity="center"
             android:singleLine="true"
             android:textColor="#F2FFFFFF"
-            android:textSize="46sp" />
+            android:textSize="34sp" />
 
         <FrameLayout
             android:id="@+id/dockBand"
@@ -161,10 +161,10 @@
             android:background="@drawable/dock_band"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:paddingStart="16dp"
-            android:paddingTop="22dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="22dp">
+            android:paddingStart="10dp"
+            android:paddingTop="15dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="15dp">
 
             <LinearLayout
                 android:id="@+id/dockRow"
@@ -185,6 +185,15 @@
             android:overScrollMode="never"
             android:scrollbars="none" />
     </FrameLayout>
+
+    <!-- Fades the next-row peek into shadow; sized in MainActivity.layoutPage(). -->
+    <View
+        android:id="@+id/peekFade"
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/peek_fade"
+        android:importantForAccessibility="no" />
 
     <LinearLayout
         android:id="@+id/menu"

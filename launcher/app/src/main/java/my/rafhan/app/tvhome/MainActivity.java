@@ -71,7 +71,11 @@ public class MainActivity extends Activity {
     // dp
     private static final int TILE_W = 152, TILE_H = 86, COL_W = 172, ROW_PITCH = 132;
     private static final int GRID_TOP = 56, GRID_PAD_TOP = 14, GRID_PAD_BOTTOM = 48;
-    private static final int BAND_BOTTOM = 32, TILE_RADIUS = 11;
+    // PEEK: how much of the grid's first row shows under the dock on the home screen.
+    // Focused dock app's name above the dock: line height (layout: 54dp) and gap to the dock.
+    private static final int HERO_H = 54, HERO_GAP = 6;
+    private static final float PEEK_ALPHA = 0.55f;
+    private static final int PEEK = 15, BAND_GAP = 18, BAND_PAD_V = 15, TILE_RADIUS = 11;
     private static final Object PAYLOAD_TILE = new Object();
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -169,7 +173,8 @@ public class MainActivity extends Activity {
         pills = new TextView[] {findViewById(R.id.pillInputs), findViewById(R.id.pillWifi),
                 findViewById(R.id.pillSettings)};
         homeViews = new View[] {findViewById(R.id.clockBlock), findViewById(R.id.pills), findViewById(R.id.dockBand),
-                findViewById(R.id.sysPanel), findViewById(R.id.prayerPanel), findViewById(R.id.usagePanel)};
+                findViewById(R.id.sysPanel), findViewById(R.id.prayerPanel), findViewById(R.id.usagePanel),
+                findViewById(R.id.peekFade)};
         system = new SystemPanel(this, findViewById(R.id.sysPanel), worker);
         prayer = new PrayerPanel(this, findViewById(R.id.prayerPanel), hijri, worker);
         usage = new UsagePanel(this, findViewById(R.id.usagePanel));
@@ -239,19 +244,30 @@ public class MainActivity extends Activity {
         v.setLayoutParams(lp);
     }
 
+    /** Grid's top edge on the home screen: its first row peeks PEEK dp above the screen bottom. */
+    private int gridTop() {
+        return screenH - px(PEEK + GRID_PAD_TOP);
+    }
+
+    /** How far the page slides up so the grid starts at GRID_TOP. */
     private int gridShift() {
-        return screenH - px(GRID_TOP);
+        return gridTop() - px(GRID_TOP);
     }
 
     private void layoutPage() {
-        place(page, 0, 2 * screenH - px(GRID_TOP));
-        int bandH = px(TILE_H + 44);
-        int bandTop = screenH - px(BAND_BOTTOM) - bandH;
+        place(page, 0, gridTop() + screenH - px(GRID_TOP));
+        int bandH = px(TILE_H + 2 * BAND_PAD_V);
+        int bandTop = screenH - px(PEEK + BAND_GAP) - bandH;
         place(findViewById(R.id.dockBand), bandTop, 0);
-        int heroTop = bandTop - px(18 + 72);
+        int heroTop = bandTop - px(HERO_GAP + HERO_H);
         place(hero, heroTop, 0);
-        place(glow, heroTop + px(36) - px(410), 0);
-        place(grid, screenH, screenH - px(GRID_TOP));
+        place(glow, heroTop + px(HERO_H / 2) - px(410), 0);
+        place(grid, gridTop(), screenH - px(GRID_TOP));
+        // Shadow from just under the dock band to the screen edge, over the peek.
+        View fade = findViewById(R.id.peekFade);
+        ViewGroup.LayoutParams flp = fade.getLayoutParams();
+        flp.height = px(PEEK + BAND_GAP - 4);
+        fade.setLayoutParams(flp);
         int side = (screenW - px(COLS * COL_W)) / 2;
         grid.setPadding(side, px(GRID_PAD_TOP), side, px(GRID_PAD_BOTTOM));
     }
@@ -475,6 +491,8 @@ public class MainActivity extends Activity {
             page.animate().translationY(newSection == GRID ? -gridShift() : 0)
                     .setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
             setHomeVisible(newSection != GRID, true);
+            // Back on the home screen the peek shows the first row again.
+            if (newSection != GRID && gridScroll != 0) grid.smoothScrollBy(0, -gridScroll, new DecelerateInterpolator(2f));
             system.setVisible(newSection != GRID);
         }
         if (newSection == GRID) scrollGridToRow(newIndex / COLS, true);
@@ -495,8 +513,11 @@ public class MainActivity extends Activity {
         page.invalidate();
     }
 
-    /** The clock, pills and dock fade out while the grid has the screen. */
+    /** The clock, pills and dock fade out while the grid has the screen; the peek is dimmed on home. */
     private void setHomeVisible(boolean visible, boolean animate) {
+        grid.animate().cancel();
+        if (animate) grid.animate().alpha(visible ? PEEK_ALPHA : 1f).setDuration(visible ? 320 : 220).start();
+        else grid.setAlpha(visible ? PEEK_ALPHA : 1f);
         for (View v : homeViews) {
             v.animate().cancel();
             if (animate) v.animate().alpha(visible ? 1f : 0f).setDuration(visible ? 320 : 220).start();

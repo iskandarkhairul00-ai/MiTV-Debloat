@@ -1,0 +1,8 @@
+<!-- Shadow over the next-row peek under the dock: clear at the top, near-black at the screen edge. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#33000000"
+        android:centerColor="#99000000"
+        android:endColor="#F2000000" />
+</shape>
