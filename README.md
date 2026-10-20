@@ -117,6 +117,17 @@ The top left shows the big clock with the date and Hijri date stacked beside it,
 - **Zone:** to use another zone, edit `prayer_zone` in `launcher/app/src/main/res/values/strings.xml` (e.g. `WLY01`, `JHR02`, see e-solat.gov.my), then run `scripts/build-and-install.sh`.
 - **Permission quirk:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
 
+### Now Playing
+
+Under the System card, whenever an app has a media session (RadioStream, Spotify, music apps):
+- **Shows:** cover art, title, artist, the app and its state (Playing / Paused).
+- **Progress:** a progress bar with time when the track has a length; **LIVE** for streams.
+- **Buttons:** **Play/Pause**, **Stop** and **Open app**. Press **Up** from the dock to reach them, Left/Right to move between them, Up again for the top bar.
+- **How it reads the session:** this low-RAM TV refuses the permission apps normally use to read other apps' media sessions (notification-listener access). So:
+  - **USB debugging on:** a small helper (`MediaHelper`) runs as the shell user over the launcher's loopback ADB connection and reports the session once a second. That includes cover art, track length and position. It costs about 26 MB and around 1% CPU, and only runs while the home screen is up.
+  - **USB debugging off:** the card reads `dumpsys media_session` every 4 s (the `DUMP` permission, granted by `build-and-install.sh`). That gives the app, title, artist, state and elapsed time, but **no cover art or progress bar**, so the app icon stands in.
+- **Apps that pause when hidden** (YouTube, Netflix) don't show up while you're on the home screen, because their session ends.
+
 ### Most used apps (last 7 days)
 
 - **The card:** under the prayer card, it shows your top 5 apps over a rolling 7 days, each with its time and a bar, plus the total.

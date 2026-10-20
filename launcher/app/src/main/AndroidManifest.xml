@@ -12,6 +12,11 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Phone remote Files tab: browse, upload and download the TV's storage. Granted over ADB
          by build-and-install.sh; requestLegacyExternalStorage gives plain file access on Android 10. -->
+    <!-- Now Playing card without USB debugging: read `dumpsys media_session`. A development
+         permission, granted over ADB by build-and-install.sh. -->
+    <uses-permission
+        android:name="android.permission.DUMP"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

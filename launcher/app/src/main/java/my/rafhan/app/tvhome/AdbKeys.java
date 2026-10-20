@@ -89,8 +89,8 @@ final class AdbKeys {
         }
     };
 
-    /** A running `hid` process (one virtual device) and its stdin. */
-    private static final class Hid {
+    /** A shell command running over the loopback ADB connection (a hid device, the media helper). */
+    static final class Hid {
         final AdbStream stream;
         final Dadb adb;
         final String pid;
@@ -104,7 +104,15 @@ final class AdbKeys {
 
     private final ContentObserver adbSetting;
 
-    AdbKeys(Context ctx) {
+    private static AdbKeys instance;
+
+    /** One loopback ADB connection per process, shared by the phone remote and Now Playing. */
+    static synchronized AdbKeys get(Context ctx) {
+        if (instance == null) instance = new AdbKeys(ctx.getApplicationContext());
+        return instance;
+    }
+
+    private AdbKeys(Context ctx) {
         this.ctx = ctx;
         adbSetting = new ContentObserver(main) {
             @Override
@@ -181,6 +189,7 @@ final class AdbKeys {
             // hid processes belong to adbd and can outlive the launcher (crash, update): clear
             // any left over so virtual devices don't pile up.
             d.shell("pkill -f com.android.commands.hid");
+            d.shell("pkill -f " + MediaHelper.class.getName());
             Hid s = openHid(d, "TV Home remote keypad", PAD_DESCRIPTOR);
             synchronized (lock) {
                 if (adb != d) {
@@ -200,16 +209,43 @@ final class AdbKeys {
         }
     }
 
-    /** Starts `hid -` (reading JSON commands from stdin) and registers a virtual HID device on it. */
-    private static Hid openHid(Dadb d, String name, String descriptor) throws Exception {
-        // `echo $$; exec` reports the pid hid will run as, so it can be killed later: closing the
-        // stream alone doesn't always end it.
-        AdbStream s = d.open("shell:echo $$; exec hid -");
+    /**
+     * Starts {@code command} as the shell user; null unless connected. Its stdout is the stream's
+     * source; stop it with {@link #stop(Hid)} (off the main thread).
+     */
+    Hid shell(String command) {
+        Dadb d;
+        synchronized (lock) {
+            if (state != State.READY || adb == null) return null;
+            d = adb;
+        }
+        try {
+            return start(d, command);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    void stop(Hid h) {
+        stopHid(h);
+    }
+
+    /** `echo $$; exec` reports the pid the command runs as, so it can be killed later: closing the
+     *  stream alone doesn't always end it. */
+    private static Hid start(Dadb d, String command) throws Exception {
+        AdbStream s = d.open("shell:echo $$; exec " + command);
         StringBuilder pid = new StringBuilder();
         for (int b; (b = s.getSource().readByte()) != '\n'; ) {
             if (b != '\r') pid.append((char) b);
             if (pid.length() > 12) break;
         }
+        return new Hid(s, d, pid.toString().trim());
+    }
+
+    /** Starts `hid -` (reading JSON commands from stdin) and registers a virtual HID device on it. */
+    private static Hid openHid(Dadb d, String name, String descriptor) throws Exception {
+        Hid h = start(d, "hid -");
+        AdbStream s = h.stream;
         Thread drain = new Thread(() -> {
             try {
                 byte[] buf = new byte[1024];
@@ -223,7 +259,7 @@ final class AdbKeys {
                 + "\",\"vid\":4660,\"pid\":22136,\"descriptor\":" + descriptor + "}\n"
                 // give Android time to add the device before the first key
                 + "{\"id\":1,\"command\":\"delay\",\"duration\":400}\n").flush();
-        return new Hid(s, d, pid.toString().trim());
+        return h;
     }
 
     /** Ends a hid process (removing its virtual device). Blocking: call off the main thread. */

@@ -45,6 +45,10 @@ case "$CUR" in
 esac
 A shell settings put secure accessibility_enabled 1
 
+# Now Playing card: this low-RAM TV refuses notification-listener access, so without USB debugging
+# the card reads `dumpsys media_session`, which needs DUMP (a development permission).
+A shell pm grant $PKG android.permission.DUMP || true
+
 # Several apps claim HOME on this TV (stock launcher, factory test, tvusage): pick ours explicitly.
 A shell cmd package set-home-activity $PKG/.MainActivity
 

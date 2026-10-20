@@ -65,7 +65,8 @@ import java.util.concurrent.Executors;
  * outcome: Up/Down move one row, Up from the dock goes to the top bar, row and bar ends stop.
  */
 public class MainActivity extends Activity {
-    private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3;
+    private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4;
+    private static final float NOW_SCALE = 1.12f;
     private static final int COLS = 5, DOCK_SIZE = 5;
     private static final float TILE_SCALE = 1.1f, PILL_SCALE = 1.06f;
     // dp
@@ -95,6 +96,7 @@ public class MainActivity extends Activity {
     private View glow;
     private View[] homeViews;
     private SystemPanel system;
+    private NowPlayingPanel nowPlaying;
     private PrayerPanel prayer;
     private UsagePanel usage;
     private Map<String, Long> usageScores = new HashMap<>();
@@ -111,7 +113,7 @@ public class MainActivity extends Activity {
     private List<AppEntry> dock = new ArrayList<>();
     private List<AppEntry> apps = new ArrayList<>();
 
-    private int section = DOCK, topIdx, dockIdx, gridIdx, menuIdx;
+    private int section = DOCK, topIdx, dockIdx, gridIdx, menuIdx, nowIdx;
     private int gridScroll;
     private int armedKey = KeyEvent.KEYCODE_UNKNOWN;
     private boolean resumed;
@@ -174,8 +176,12 @@ public class MainActivity extends Activity {
                 findViewById(R.id.pillSettings)};
         homeViews = new View[] {findViewById(R.id.clockBlock), findViewById(R.id.pills), findViewById(R.id.dockBand),
                 findViewById(R.id.sysPanel), findViewById(R.id.prayerPanel), findViewById(R.id.usagePanel),
-                findViewById(R.id.peekFade)};
+                findViewById(R.id.peekFade), findViewById(R.id.nowPlaying)};
         system = new SystemPanel(this, findViewById(R.id.sysPanel), worker);
+        nowPlaying = new NowPlayingPanel(this, findViewById(R.id.nowPlaying), worker, shown -> {
+            // Playback ended while its buttons had focus: back to the dock.
+            if (!shown && section == NOW && !dock.isEmpty()) moveFocus(DOCK, dockIdx);
+        });
         prayer = new PrayerPanel(this, findViewById(R.id.prayerPanel), hijri, worker);
         usage = new UsagePanel(this, findViewById(R.id.usagePanel));
         alignSystemPanel();
@@ -301,6 +307,19 @@ public class MainActivity extends Activity {
                 lp.width = width;
                 lp.setMarginEnd(end);
                 card.post(() -> card.setLayoutParams(lp));
+            }
+        });
+        // Now Playing sits under the system card, same width and edges.
+        View np = findViewById(R.id.nowPlaying);
+        card.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) np.getLayoutParams();
+            ViewGroup.MarginLayoutParams sp = (ViewGroup.MarginLayoutParams) card.getLayoutParams();
+            int top = b + px(10);
+            if (lp.width != r - l || lp.getMarginEnd() != sp.getMarginEnd() || lp.topMargin != top) {
+                lp.width = r - l;
+                lp.setMarginEnd(sp.getMarginEnd());
+                lp.topMargin = top;
+                np.post(() -> np.setLayoutParams(lp));
             }
         });
 
@@ -472,6 +491,7 @@ public class MainActivity extends Activity {
             case TOP: return topIdx;
             case DOCK: return dockIdx;
             case GRID: return gridIdx;
+            case NOW: return nowIdx;
             default: return menuIdx;
         }
     }
@@ -484,6 +504,7 @@ public class MainActivity extends Activity {
             case TOP: topIdx = newIndex; break;
             case DOCK: dockIdx = newIndex; break;
             case GRID: gridIdx = newIndex; break;
+            case NOW: nowIdx = newIndex; break;
             default: menuIdx = newIndex; break;
         }
         applyLook(section, newIndex, true, true);
@@ -494,6 +515,7 @@ public class MainActivity extends Activity {
             // Back on the home screen the peek shows the first row again.
             if (newSection != GRID && gridScroll != 0) grid.smoothScrollBy(0, -gridScroll, new DecelerateInterpolator(2f));
             system.setVisible(newSection != GRID);
+            nowPlaying.setVisible(newSection != GRID);
         }
         if (newSection == GRID) scrollGridToRow(newIndex / COLS, true);
         updateHero(true);
@@ -506,9 +528,11 @@ public class MainActivity extends Activity {
     private void refreshFocusLook() {
         for (int i = 0; i < pills.length; i++) applyLook(TOP, i, section == TOP && i == topIdx, false);
         for (int i = 0; i < dockTiles.size(); i++) applyLook(DOCK, i, section == DOCK && i == dockIdx, false);
+        for (int i = 0; i < NowPlayingPanel.BUTTONS; i++) applyLook(NOW, i, section == NOW && i == nowIdx, false);
         adapter.notifyDataSetChanged();
         setHomeVisible(section != GRID, false);
         system.setVisible(section != GRID);
+        nowPlaying.setVisible(section != GRID);
         updateHero(false);
         page.invalidate();
     }
@@ -534,6 +558,9 @@ public class MainActivity extends Activity {
             scale = on ? PILL_SCALE : 1f;
         } else if (sec == DOCK && idx < dockTiles.size()) {
             v = dockTiles.get(idx);
+        } else if (sec == NOW && idx < NowPlayingPanel.BUTTONS) {
+            v = nowPlaying.button(idx);
+            scale = on ? NOW_SCALE : 1f;
         } else if (sec == GRID) {
             RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(idx);
             if (vh instanceof Holder) {
@@ -594,6 +621,11 @@ public class MainActivity extends Activity {
                 break;
             case MENU:
                 v = menu.getChildAt(menuIdx);
+                break;
+            case NOW:
+                v = nowPlaying.button(nowIdx);
+                scale = NOW_SCALE;
+                radius = v.getHeight() * scale / 2f;
                 break;
         }
         if (v == null || v.getWidth() == 0) return;
@@ -684,6 +716,10 @@ public class MainActivity extends Activity {
     private void onUp() {
         switch (section) {
             case DOCK:
+                if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
+                else moveFocus(TOP, topIdx);
+                break;
+            case NOW:
                 moveFocus(TOP, topIdx);
                 break;
             case GRID:
@@ -704,8 +740,12 @@ public class MainActivity extends Activity {
         int n = apps.size();
         switch (section) {
             case TOP:
-                if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
+                if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
+                else if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
                 else if (n > 0) moveFocus(GRID, 0);
+                break;
+            case NOW:
+                if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
                 break;
             case DOCK:
                 if (n > 0) moveFocus(GRID, Math.min(dockIdx, Math.min(COLS, n) - 1));
@@ -733,6 +773,11 @@ public class MainActivity extends Activity {
                 if (i >= 0 && i < dock.size()) moveFocus(DOCK, i);
                 break;
             }
+            case NOW: {
+                int i = nowIdx + dir;
+                if (i >= 0 && i < NowPlayingPanel.BUTTONS) moveFocus(NOW, i);
+                break;
+            }
             case GRID: {
                 int col = gridIdx % COLS, i = gridIdx + dir;
                 if (dir < 0 ? col > 0 : col < COLS - 1 && i < apps.size()) moveFocus(GRID, i);
@@ -755,6 +800,9 @@ public class MainActivity extends Activity {
             case GRID:
                 if (gridIdx < apps.size()) launch(apps.get(gridIdx));
                 break;
+            case NOW:
+                nowPlaying.press(nowIdx);
+                break;
             case MENU:
                 if (menuIdx < inputs.size()) {
                     Intent intent = inputs.get(menuIdx).intent;
@@ -767,7 +815,7 @@ public class MainActivity extends Activity {
 
     private void onBack() {
         if (section == MENU) closeMenu();
-        else if (section == GRID || section == TOP) {
+        else if (section == GRID || section == TOP || section == NOW) {
             if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
         }
     }
@@ -929,6 +977,9 @@ public class MainActivity extends Activity {
         updateNetwork();
         loadWallpaper();
         system.onResume();
+        nowPlaying.start();
+        // Back from an app (e.g. after "Open app"): the dock, not the card's buttons.
+        if (section == NOW && !dock.isEmpty()) moveFocus(DOCK, dockIdx);
         refreshUsage();
         RemoteBridge.attach(remoteKeys);
     }
@@ -949,6 +1000,7 @@ public class MainActivity extends Activity {
         RemoteBridge.detach(remoteKeys);
         unregisterReceiver(timeReceiver);
         system.onPause();
+        nowPlaying.stop();
         saveFocus();
         super.onPause();
     }

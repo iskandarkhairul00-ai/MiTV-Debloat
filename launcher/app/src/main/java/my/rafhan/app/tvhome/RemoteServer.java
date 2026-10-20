@@ -88,7 +88,7 @@ final class RemoteServer {
         prefs = ctx.getSharedPreferences("remote", Context.MODE_PRIVATE);
         overlay = new PinOverlay(ctx);
         files = new FileApi(ctx);
-        adbKeys = new AdbKeys(ctx);
+        adbKeys = AdbKeys.get(ctx);
     }
 
     void start() {
@@ -109,7 +109,6 @@ final class RemoteServer {
         }
         pool.shutdownNow();
         overlay.hide();
-        adbKeys.close();
     }
 
     private void acceptLoop() {
