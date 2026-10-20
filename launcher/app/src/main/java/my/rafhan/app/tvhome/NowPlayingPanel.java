@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
  */
 final class NowPlayingPanel {
     static final int PLAY_PAUSE = 0, STOP = 1, OPEN = 2, BUTTONS = 3;
-    private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF;
+    private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, LIVE = 0xFFFF5A52;
     /** Cover is a square this size, and sets the card's height. */
     private static final int COVER = 88;
     private static final long DUMPSYS_EVERY_MS = 4000, HELPER_RETRY_MS = 5000;
@@ -448,10 +448,14 @@ final class NowPlayingPanel {
             bar.setVisibility(View.VISIBLE);
             bar.set(pos / (float) i.duration);
             setText(time, clock(pos) + " / " + clock(i.duration));
+            time.setTextColor(DIM);
         } else {
             // The helper reports length 0 for live streams; dumpsys doesn't expose the length at all.
             bar.setVisibility(View.GONE);
-            setText(time, helper != null ? "LIVE" : clock(pos));
+            boolean live = helper != null;
+            setText(time, live ? "\u25CF LIVE" : clock(pos));
+            // Red, the broadcast "on air" colour (green already means OK/on in the System card).
+            time.setTextColor(live ? LIVE : DIM);
         }
     }
 
