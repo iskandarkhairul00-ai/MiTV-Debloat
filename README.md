@@ -270,6 +270,25 @@ Notes on the install:
 - It uses `cmd package set-home-activity`, because several apps claim HOME on this TV: the factory test, tvusage and FallbackHome.
 - While the stock launcher is enabled, it always wins (its priority is 2). That's why it has to be disabled.
 
+## Benchmark: this launcher vs the stock launcher (2026-10-21)
+
+Measured with `scripts/benchmark.sh <home component> <label>`. Conditions:
+- Nothing was playing, and USB debugging was on.
+- The stock launcher ran without its recommendation services, which this setup disables.
+
+| | This launcher | Stock Android TV launcher |
+|---|---|---|
+| Memory, idle / after navigating (PSS) | 104 / 133 MB (3 processes: launcher, Now Playing helper, virtual keypad) | 97 / 132 MB (1 process) |
+| CPU, idle, 60 s | 0.54 s | 0.12 s |
+| Cold start (process killed → first frame) | 2.0–2.1 s | 2.0–2.1 s |
+| Back to home from an app (wait time) | 75–178 ms | 95–105 ms |
+| Janky frames while navigating | 11.4 % (48/420) | 19.1 % (61/320) |
+| Frame time p50 / p90 / p99 | 8 / 17 / 65 ms | 5 / 20 / 77 ms |
+
+**Notes:**
+- **Without USB debugging** the Now Playing helper (~23 MB) and the virtual keypad (~21 MB) don't run, so the launcher is about 60 MB at idle.
+- **Idle CPU** comes mainly from the System card's 2 s refresh and the Now Playing helper's 1 s poll. That is under 1 % of one core.
+
 ## Reconnecting ADB
 
 All scripts talk to the TV over network ADB. To use them again:
