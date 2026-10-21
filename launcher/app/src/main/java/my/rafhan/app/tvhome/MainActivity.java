@@ -67,6 +67,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4;
     private static final float NOW_SCALE = 1.12f;
+    private static final int RIGHT_CARD_W = 412; // System and Now Playing cards, dp
     private static final int COLS = 5, DOCK_SIZE = 5;
     private static final float TILE_SCALE = 1.1f, PILL_SCALE = 1.06f;
     // dp
@@ -301,9 +302,10 @@ public class MainActivity extends Activity {
     private void alignSystemPanel() {
         View row = findViewById(R.id.pills), card = findViewById(R.id.sysPanel);
         row.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int left = l + pills[0].getLeft();
+            // Fixed width, right edge under the Settings pill: the Wi-Fi pill's label changes
+            // ("No internet", "Disconnected", network names) mustn't resize the cards.
             int right = r - row.getPaddingEnd();
-            int width = Math.max(px(380), right - left);
+            int width = px(RIGHT_CARD_W);
             ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) card.getLayoutParams();
             int end = screenW - right;
             if (lp.width != width || lp.getMarginEnd() != end) {
