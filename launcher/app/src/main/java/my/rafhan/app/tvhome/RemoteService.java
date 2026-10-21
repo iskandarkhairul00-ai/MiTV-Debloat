@@ -36,6 +36,12 @@ public class RemoteService extends Service {
     }
 
     @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_UI_HIDDEN && server != null) server.trim();
+    }
+
+    @Override
     public void onDestroy() {
         if (server != null) server.stop();
         super.onDestroy();

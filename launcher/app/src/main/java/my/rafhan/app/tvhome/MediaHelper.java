@@ -127,7 +127,7 @@ public final class MediaHelper {
                 out.println("{\"error\":" + JSONObject.quote(String.valueOf(e)) + "}");
                 out.flush();
             }
-            SystemClock.sleep(1000);
+            SystemClock.sleep(2000);
         }
     }
 

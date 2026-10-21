@@ -120,6 +120,11 @@ public class MainActivity extends Activity {
     private int gridScrollTarget;
     private int armedKey = KeyEvent.KEYCODE_UNKNOWN;
     private boolean resumed;
+    // Cards that refresh (System, Now Playing) run only while home is resumed AND has window
+    // focus: the screensaver (a daydream window) covers home without pausing it.
+    private boolean live;
+    private boolean appsLoaded;
+    private boolean tilesDropped;
     private long wallpaperStamp = -1;
     private ConnectivityManager.NetworkCallback netCallback;
 
@@ -235,8 +240,7 @@ public class MainActivity extends Activity {
         pf.addDataScheme("package");
         ContextCompat.registerReceiver(this, packageReceiver, pf, ContextCompat.RECEIVER_EXPORTED);
 
-        loadApps();
-        restoreFocus();
+        loadApps(); // restores focus when the list arrives
         startForegroundService(new Intent(this, RemoteService.class));
     }
 
@@ -342,20 +346,32 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- apps
 
+    /**
+     * App list, dock and usage ranking are read on the worker (PackageManager and usage-stats
+     * queries take a few hundred ms on this TV), so the home screen draws first and fills in.
+     */
     private void loadApps() {
+        worker.execute(() -> {
+            List<AppEntry> all = AppRepository.load(this);
+            List<String> dockPkgs = DockConfig.load(this);
+            Map<String, Long> scores = UsageScores.week(this);
+            main.post(() -> applyApps(all, dockPkgs, scores));
+        });
+    }
+
+    private void applyApps(List<AppEntry> all, List<String> dockPkgs, Map<String, Long> scores) {
         String focusedPkg = focusedPackage();
-        List<AppEntry> all = AppRepository.load(this);
         Map<String, AppEntry> byPkg = new HashMap<>();
         for (AppEntry e : all) byPkg.put(e.pkg, e);
 
         List<AppEntry> newDock = new ArrayList<>();
-        for (String pkg : DockConfig.load(this)) {
+        for (String pkg : dockPkgs) {
             AppEntry e = byPkg.get(pkg);
             if (e != null && !newDock.contains(e) && newDock.size() < DOCK_SIZE) newDock.add(e);
         }
         List<AppEntry> newApps = new ArrayList<>(all);
         newApps.removeAll(newDock);
-        usageScores = usage.weekScores();
+        usageScores = scores;
         sortByUsage(newApps);
 
         List<AppEntry> toRender = new ArrayList<>();
@@ -391,15 +407,25 @@ public class MainActivity extends Activity {
         if (section == GRID && apps.isEmpty()) section = DOCK;
         if (section == DOCK && dock.isEmpty()) section = TOP;
         usage.render(new ArrayList<AppEntry>() {{ addAll(dock); addAll(apps); }}, usageScores);
-        refreshFocusLook();
+        if (!appsLoaded) {
+            appsLoaded = true;
+            restoreFocus(); // needs the app list; first load only
+        } else {
+            refreshFocusLook();
+        }
 
         // Dock first so the home row fills in before the grid below it.
         toRender.sort((a, b) -> Boolean.compare(!dock.contains(a), !dock.contains(b)));
         int w = px(TILE_W), h = px(TILE_H);
         for (AppEntry e : toRender) {
             worker.execute(() -> {
-                Bitmap bmp = TileRenderer.render(this, e, w, h);
-                int color = TileRenderer.sampleGlow(bmp);
+                Bitmap drawn = TileRenderer.render(this, e, w, h);
+                int color = TileRenderer.sampleGlow(drawn);
+                // Hardware bitmap: the pixels live once, in GPU memory, instead of a heap copy
+                // plus the GPU texture.
+                Bitmap hw = drawn.copy(Bitmap.Config.HARDWARE, false);
+                Bitmap bmp = hw != null ? hw : drawn;
+                if (hw != null) drawn.recycle();
                 main.post(() -> {
                     e.tile = bmp;
                     e.glow = color;
@@ -417,7 +443,15 @@ public class MainActivity extends Activity {
 
     /** On every return home: re-rank the grid and refresh the card, keeping focus on the same app. */
     private void refreshUsage() {
-        usageScores = usage.weekScores();
+        if (!appsLoaded) return; // the first loadApps() ranks them
+        worker.execute(() -> {
+            Map<String, Long> scores = UsageScores.week(this);
+            main.post(() -> applyUsage(scores));
+        });
+    }
+
+    private void applyUsage(Map<String, Long> scores) {
+        usageScores = scores;
         List<AppEntry> sorted = new ArrayList<>(apps);
         sortByUsage(sorted);
         if (!sorted.equals(apps)) {
@@ -954,6 +988,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        main.removeCallbacks(dropTiles);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         netCallback = new ConnectivityManager.NetworkCallback() {
             @Override
@@ -990,12 +1025,63 @@ public class MainActivity extends Activity {
         updateClock();
         updateNetwork();
         loadWallpaper();
-        system.onResume();
-        nowPlaying.start();
+        updateLive();
+        if (tilesDropped) {
+            tilesDropped = false;
+            loadApps(); // re-renders the tiles dropped by onTrimMemory
+        }
         // Back from an app (e.g. after "Open app"): the dock, not the card's buttons.
         if (section == NOW && !dock.isEmpty()) moveFocus(DOCK, dockIdx);
         refreshUsage();
         RemoteBridge.attach(remoteKeys);
+    }
+
+    /**
+     * Another app has been in front for a while: drop the grid's tile images (the 5 dock tiles
+     * stay, so home looks the same on return). They're re-rendered off the main thread when home
+     * comes back. Run from onStop + delay: Android doesn't send this process TRIM_MEMORY_UI_HIDDEN
+     * because RemoteService keeps it in the foreground-service state.
+     */
+    private final Runnable dropTiles = this::dropGridTiles;
+
+    private void dropGridTiles() {
+        if (resumed || !appsLoaded || tilesDropped) return;
+        // Detach the images from every grid view first (on screen and in the recycle pool), then
+        // free them now rather than whenever the GC gets round to it.
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            RecyclerView.ViewHolder vh = grid.getChildViewHolder(grid.getChildAt(i));
+            if (vh instanceof Holder) ((Holder) vh).tile.setImageDrawable(null);
+        }
+        grid.getRecycledViewPool().clear();
+        java.util.Set<Bitmap> free = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (AppEntry e : apps) {
+            if (dock.contains(e) || e.tile == null) continue;
+            free.add(e.tile);
+            e.tile = null;
+            AppEntry r = rendered.remove(e.cacheKey);
+            if (r != null) r.tile = null;
+        }
+        for (Bitmap b : free) b.recycle();
+        tilesDropped = true;
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        updateLive();
+    }
+
+    private void updateLive() {
+        boolean want = resumed && hasWindowFocus();
+        if (want == live) return;
+        live = want;
+        if (want) {
+            system.onResume();
+            nowPlaying.start();
+        } else {
+            system.onPause();
+            nowPlaying.stop();
+        }
     }
 
     @Override
@@ -1013,14 +1099,14 @@ public class MainActivity extends Activity {
         resumed = false;
         RemoteBridge.detach(remoteKeys);
         unregisterReceiver(timeReceiver);
-        system.onPause();
-        nowPlaying.stop();
+        updateLive();
         saveFocus();
         super.onPause();
     }
 
     @Override
     protected void onStop() {
+        main.postDelayed(dropTiles, 30_000);
         if (netCallback != null) {
             getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback);
             netCallback = null;

@@ -48,14 +48,16 @@ import java.util.regex.Pattern;
  *    connection ({@link AdbKeys}) and reports the session as JSON lines, cover art included;
  *  - otherwise: `dumpsys media_session` (DUMP is granted by build-and-install.sh), every few
  *    seconds while the home screen shows: app, title, artist, state, position; no cover/length.
- * Both only run while the home screen is on screen. Buttons send media keys.
+ * Only while home is on screen (and not under the screensaver): `dumpsys` is skipped while no
+ * audio plays, and the helper (~23 MB) runs only while a media session exists. Buttons send
+ * media keys.
  */
 final class NowPlayingPanel {
     static final int PLAY_PAUSE = 0, STOP = 1, OPEN = 2, BUTTONS = 3;
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, LIVE = 0xFFFF5A52;
     /** Cover is a square this size, and sets the card's height. */
     private static final int COVER = 88;
-    private static final long DUMPSYS_EVERY_MS = 4000, HELPER_RETRY_MS = 5000;
+    private static final long DUMPSYS_EVERY_MS = 4000;
 
     interface Listener {
         /** The card appeared or disappeared. */
@@ -77,6 +79,7 @@ final class NowPlayingPanel {
     private final float dp;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AdbKeys adb;
+    private final AudioManager audio;
 
     private final ImageView cover;
     private final TextView source, title, artist, time;
@@ -99,22 +102,28 @@ final class NowPlayingPanel {
         }
     };
 
+    /**
+     * The cheap check: nothing to read while no audio plays and no card is up. Otherwise
+     * `dumpsys media_session`, and when it finds a session (and ADB is up) the helper takes over
+     * for cover art and progress.
+     */
     private final Runnable dumpsysPoll = new Runnable() {
         @Override
         public void run() {
             if (!started || helper != null) return;
+            if (visibleOnScreen) main.postDelayed(this, DUMPSYS_EVERY_MS);
+            if (info == null && !audio.isMusicActive()) return;
             int gen = generation;
             worker.execute(() -> {
                 Info i = readDumpsys();
                 main.post(() -> {
-                    if (gen == generation && helper == null) show(i);
+                    if (gen != generation || helper != null) return;
+                    show(i);
+                    if (i != null) startHelper();
                 });
             });
-            if (visibleOnScreen) main.postDelayed(this, DUMPSYS_EVERY_MS);
         }
     };
-
-    private final Runnable helperRetry = this::startHelper;
 
     NowPlayingPanel(Context ctx, LinearLayout card, Executor worker, Listener listener) {
         this.ctx = ctx;
@@ -123,6 +132,7 @@ final class NowPlayingPanel {
         this.listener = listener;
         dp = ctx.getResources().getDisplayMetrics().density;
         adb = AdbKeys.get(ctx);
+        audio = ctx.getSystemService(AudioManager.class);
 
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
@@ -183,8 +193,7 @@ final class NowPlayingPanel {
         started = true;
         generation++;
         adb.ensure();
-        main.post(dumpsysPoll); // something to show straight away; stops once the helper runs
-        startHelper();
+        main.post(dumpsysPoll); // the helper is only started once something is playing
     }
 
     void stop() {
@@ -193,7 +202,6 @@ final class NowPlayingPanel {
         generation++;
         main.removeCallbacks(tick);
         main.removeCallbacks(dumpsysPoll);
-        main.removeCallbacks(helperRetry);
         AdbKeys.Hid h = helper;
         helper = null;
         if (h != null) new Thread(() -> adb.stop(h), "media-helper-stop").start();
@@ -260,21 +268,23 @@ final class NowPlayingPanel {
 
     // ---------------------------------------------------------------- source 1: helper over ADB
 
+    private boolean helperStarting;
+
+    /** Only while a media session exists; the helper costs ~23 MB while it runs. */
     private void startHelper() {
-        main.removeCallbacks(helperRetry);
-        if (!started || helper != null) return;
+        if (!started || helper != null || helperStarting) return;
+        if (adb.state() != AdbKeys.State.READY) {
+            adb.ensure(); // no ADB: dumpsys keeps the card up to date without art
+            return;
+        }
+        helperStarting = true;
         int gen = generation;
         new Thread(() -> {
             AdbKeys.Hid h = adb.state() == AdbKeys.State.READY ? adb.shell(
                     "app_process -cp " + ctx.getPackageCodePath() + " /system/bin " + MediaHelper.class.getName()) : null;
             main.post(() -> {
-                if (h == null) {
-                    if (gen == generation && started) {
-                        adb.ensure();
-                        main.postDelayed(helperRetry, HELPER_RETRY_MS);
-                    }
-                    return;
-                }
+                helperStarting = false;
+                if (h == null) return; // dumpsys polling carries on and will try again
                 if (gen != generation || !started) {
                     new Thread(() -> adb.stop(h)).start();
                     return;
@@ -323,18 +333,27 @@ final class NowPlayingPanel {
                         helperArtId = fi.artId;
                     }
                     show(fi);
+                    if (fi == null) stopHelper(); // playback ended: free the helper
                 });
             }
         } catch (Throwable ignored) {
         }
-        // Helper ended (ADB off, connection dropped): back to dumpsys, retry the helper later.
+        // Helper ended (stopped, ADB off, connection dropped): back to dumpsys polling.
         main.post(() -> {
             if (helper == h) helper = null;
             if (gen == generation && started) {
+                main.removeCallbacks(dumpsysPoll);
                 main.post(dumpsysPoll);
-                main.postDelayed(helperRetry, HELPER_RETRY_MS);
             }
         });
+    }
+
+    private void stopHelper() {
+        AdbKeys.Hid h = helper;
+        helper = null;
+        if (h != null) new Thread(() -> adb.stop(h), "media-helper-stop").start();
+        main.removeCallbacks(dumpsysPoll);
+        if (started) main.post(dumpsysPoll);
     }
 
     // ---------------------------------------------------------------- source 2: dumpsys

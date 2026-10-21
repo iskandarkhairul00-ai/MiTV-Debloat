@@ -11,8 +11,8 @@ PKG=my.rafhan.app.tvhome
 [ -x "${JAVA_HOME:-}/bin/java" ] || export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
 
 adb connect "$TV" >/dev/null
-(cd launcher && ./gradlew -q assembleDebug)
-APK=launcher/app/build/outputs/apk/debug/app-debug.apk
+(cd launcher && ./gradlew -q assembleRelease)
+APK=launcher/app/build/outputs/apk/release/app-release.apk
 
 # Push + pm install instead of `adb install`: on some sets adb install waits for an on-screen confirmation.
 A push "$APK" /data/local/tmp/tvhome.apk >/dev/null

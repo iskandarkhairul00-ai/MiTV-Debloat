@@ -50,7 +50,7 @@ import java.util.concurrent.Executor;
 final class SystemPanel {
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, ICON = 0xA6FFFFFF;
     private static final int GOOD = 0xFF63D489, WARN = 0xFFFFB340, BAD = 0xFFFF6B5E;
-    private static final long TICK_MS = 2000;
+    private static final long TICK_MS = 5000;
 
     private final Context ctx;
     private final float dp;
@@ -69,7 +69,7 @@ final class SystemPanel {
         @Override
         public void run() {
             refreshFast();
-            if (ticks++ % 15 == 0) refreshDisk();
+            if (ticks++ % 6 == 0) refreshDisk(); // every 30 s
             main.postDelayed(this, TICK_MS);
         }
     };

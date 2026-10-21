@@ -14,7 +14,8 @@ MiTV-Debloat/
 │   └── dumpsys/                 activities/services of every manufacturer package that was checked
 ├── launcher/                    the launcher source (Java, AndroidX RecyclerView, minSdk 29, targetSdk 36), incl. the phone remote
 ├── scripts/
-│   ├── build-and-install.sh     build the launcher, install it, make it the home screen
+│   ├── build-and-install.sh     build the launcher (R8 release, ~0.5 MB APK), install it, make it the home screen
+│   ├── benchmark.sh             measure a launcher's memory, CPU, start-up and smoothness
 │   ├── restore.sh               undo everything
 │   ├── disable.sh               disable packages (and log them so restore.sh can undo)
 │   ├── key.sh / shot.sh         send remote keys / pull a screenshot (for testing)
@@ -124,8 +125,10 @@ Under the System card, whenever an app has a media session (RadioStream, Spotify
 - **Progress:** a progress bar with time when the track has a length; **LIVE** for streams.
 - **Buttons:** **Play/Pause**, **Stop** and **Open app**. Press **Up** from the dock to reach them, Left/Right to move between them, Up again for the top bar.
 - **How it reads the session:** this low-RAM TV refuses the permission apps normally use to read other apps' media sessions (notification-listener access). So:
-  - **USB debugging on:** a small helper (`MediaHelper`) runs as the shell user over the launcher's loopback ADB connection and reports the session once a second. That includes cover art, track length and position. It costs about 26 MB and around 1% CPU, and only runs while the home screen is up.
-  - **USB debugging off:** the card reads `dumpsys media_session` every 4 s (the `DUMP` permission, granted by `build-and-install.sh`). That gives the app, title, artist, state and elapsed time, but **no cover art or progress bar**, so the app icon stands in.
+  - **Detecting playback:** every 4 s the card asks Android whether any audio is playing, which is nearly free. Only if something is playing does it read `dumpsys media_session` (the `DUMP` permission, granted by `build-and-install.sh`). That gives the app, title, artist, state and elapsed time.
+  - **USB debugging on:** once a session is found, a small helper (`MediaHelper`) starts as the shell user over the launcher's loopback ADB connection and reports the session every 2 s, with cover art, track length and position. It costs about 23 MB and stops when playback ends.
+  - **USB debugging off:** no cover art or progress bar, so the app icon stands in.
+  - **When it runs:** all of this only while the home screen is up and in focus. It stops under the screensaver.
 - **Apps that pause when hidden** (YouTube, Netflix) don't show up while you're on the home screen, because their session ends.
 
 ### Most used apps (last 7 days)
@@ -195,7 +198,7 @@ Open **http://192.168.0.44:8486** on your phone, on the same Wi-Fi. Use **Add to
 - **First use:** the TV asks **"Allow USB debugging?"** for the launcher's own key. Tick *Always allow* and accept. The fingerprint is the launcher's key in its private storage.
 - **It connects** when a paired phone opens the remote, and drops when USB debugging is turned off. Then the remote falls back to home-screen-only, and the page says so.
 - **After a reboot** network ADB (port 5555) may be off again. Turn it back on to get in-app D-pad.
-- **Cost:** each virtual device is a small `hid` process, about 20 MB. The keypad runs while ADB is on; the keyboard only while typing.
+- **Cost:** each virtual device is a small `hid` process, about 20 MB. The keypad is created on the first phone-remote key press inside an app and removed after 5 minutes without one; the keyboard only exists while typing (1 minute idle).
 - **Security:** while debugging is on the launcher has ADB shell access, the same power network ADB already gives anyone on your Wi-Fi. Only paired phones can use it.
 
 **Files tab:**
@@ -272,22 +275,25 @@ Notes on the install:
 
 ## Benchmark: this launcher vs the stock launcher (2026-10-21)
 
-Measured with `scripts/benchmark.sh <home component> <label>`. Conditions:
+Measured with `scripts/benchmark.sh <home component> <label>`, using the optimised R8 release build. Conditions:
 - Nothing was playing, and USB debugging was on.
 - The stock launcher ran without its recommendation services, which this setup disables.
 
 | | This launcher | Stock Android TV launcher |
 |---|---|---|
-| Memory, idle / after navigating (PSS) | 104 / 133 MB (3 processes: launcher, Now Playing helper, virtual keypad) | 97 / 132 MB (1 process) |
-| CPU, idle, 60 s | 0.54 s | 0.12 s |
-| Cold start (process killed → first frame) | 2.0–2.1 s | 2.0–2.1 s |
-| Back to home from an app (wait time) | 75–178 ms | 95–105 ms |
-| Janky frames while navigating | 11.4 % (48/420) | 19.1 % (61/320) |
-| Frame time p50 / p90 / p99 | 8 / 17 / 65 ms | 5 / 20 / 77 ms |
+| Memory, idle / after navigating (PSS) | **40 / 69 MB** | 91 / 125 MB |
+| CPU, idle, 60 s | 0.15 s | 0.13 s |
+| Cold start (process killed → first frame) | **0.50–0.57 s** | 0.68–0.75 s |
+| Back to home from an app (wait time) | 154–172 ms | 171–259 ms |
+| Janky frames while navigating | **6.2 % (35/569)** | 24.9 % (83/334) |
+| Frame time p50 / p90 / p99 | 7 / 8 / 57 ms | 5 / 22 / 48 ms |
+| APK size | 0.5 MB | 12.7 MB |
 
 **Notes:**
-- **Without USB debugging** the Now Playing helper (~23 MB) and the virtual keypad (~21 MB) don't run, so the launcher is about 60 MB at idle.
-- **Idle CPU** comes mainly from the System card's 2 s refresh and the Now Playing helper's 1 s poll. That is under 1 % of one core.
+- **Extra processes only while used:** the launcher is a single process at idle. The Now Playing helper (~23 MB) runs only while something plays, and the virtual keypad (~21 MB) only for 5 minutes after a phone-remote key press inside an app.
+- **Screensaver:** under the screensaver the launcher uses no CPU (0 ticks in 60 s). The System card refreshes every 5 s, and only while home is on screen and in focus.
+- **Other apps in front:** after 30 s with another full-screen app in front, the app-list tile images are freed and redrawn on return. Hardware bitmaps live in graphics memory, so this saving doesn't show up in PSS.
+- **Before these optimisations** the same benchmark measured 104 / 133 MB, 0.54 s idle CPU, 2.0–2.1 s cold start and 11.4 % janky frames.
 
 ## Reconnecting ADB
 

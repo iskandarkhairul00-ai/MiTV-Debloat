@@ -14,6 +14,17 @@ android {
         versionName '1.0'
     }
 
+    buildTypes {
+        // What build-and-install.sh installs: R8-shrunk code and resources. Signed with the debug
+        // key so it upgrades the existing install in place (same signature, data kept).
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

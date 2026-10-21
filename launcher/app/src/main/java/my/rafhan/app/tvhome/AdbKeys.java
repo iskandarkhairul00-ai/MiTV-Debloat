@@ -55,6 +55,8 @@ final class AdbKeys {
     }
 
     private static final long KEYBOARD_IDLE_MS = 60_000;
+    // The keypad's `hid` process costs ~21 MB: start it on the first key, stop it after this idle.
+    private static final long PAD_IDLE_MS = 5 * 60_000;
     // dadb doesn't always notice when "Allow USB debugging" is accepted, so a waiting connection is
     // dropped and retried after this long; once the key is allowed the retry connects at once.
     private static final long ALLOW_RETRY_MS = 20_000;
@@ -69,7 +71,24 @@ final class AdbKeys {
     private int allowRetries;
     private Dadb adb;
     private Hid pad, keyboard;
-    private long keyboardUsed;
+    private long keyboardUsed, padUsed;
+
+    private final Runnable padIdle = new Runnable() {
+        @Override
+        public void run() {
+            synchronized (lock) {
+                if (pad == null) return;
+                long idle = SystemClock.elapsedRealtime() - padUsed;
+                if (idle < PAD_IDLE_MS) {
+                    main.postDelayed(this, PAD_IDLE_MS - idle + 50);
+                    return;
+                }
+                Hid p = pad;
+                pad = null;
+                new Thread(() -> stopHid(p), "adb-hid-stop").start();
+            }
+        }
+    };
 
     private final Runnable keyboardIdle = new Runnable() {
         @Override
@@ -190,13 +209,9 @@ final class AdbKeys {
             // any left over so virtual devices don't pile up.
             d.shell("pkill -f com.android.commands.hid");
             d.shell("pkill -f " + MediaHelper.class.getName());
-            Hid s = openHid(d, "TV Home remote keypad", PAD_DESCRIPTOR);
+            // The keypad device is created on the first key press (see send()).
             synchronized (lock) {
-                if (adb != d) {
-                    stopHid(s);
-                    return; // closed meanwhile (ADB turned off / timed out)
-                }
-                pad = s;
+                if (adb != d) return; // closed meanwhile (ADB turned off / timed out)
                 state = State.READY;
                 error = null;
                 allowRetries = 0;
@@ -304,6 +319,12 @@ final class AdbKeys {
         synchronized (lock) {
             if (state != State.READY || adb == null) return false;
             try {
+                if (!toKeyboard) {
+                    if (pad == null) pad = openHid(adb, "TV Home remote keypad", PAD_DESCRIPTOR);
+                    padUsed = SystemClock.elapsedRealtime();
+                    main.removeCallbacks(padIdle);
+                    main.postDelayed(padIdle, PAD_IDLE_MS);
+                }
                 Hid s = pad;
                 if (toKeyboard) {
                     if (keyboard == null) keyboard = openHid(adb, "TV Home remote keyboard", KEYBOARD_DESCRIPTOR);

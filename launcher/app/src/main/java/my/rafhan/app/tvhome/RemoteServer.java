@@ -98,6 +98,16 @@ final class RemoteServer {
         t.start();
     }
 
+    /** Drops cached app banners and the app list (rebuilt on the next phone request). */
+    void trim() {
+        synchronized (banners) {
+            banners.clear();
+        }
+        synchronized (this) {
+            appCache = null;
+        }
+    }
+
     void stop() {
         running = false;
         ServerSocket s = socket;
