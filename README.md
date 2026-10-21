@@ -9,7 +9,7 @@ Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (
 MiTV-Debloat/
 ├── README.md
 ├── PROMPT.md                    paste into an AI coding assistant to repeat this setup on another TV
-├── backup/                      state captured BEFORE any change
+├── backup/                      state captured BEFORE any change (local only, not in the repo: it identifies the TV)
 │   ├── disabled-by-us.txt       every package this project disabled (restore.sh reads it)
 │   ├── packages-*.txt           full package lists (all, system, third-party, disabled)
 │   ├── getprop.txt, settings-{global,secure,system}.txt
