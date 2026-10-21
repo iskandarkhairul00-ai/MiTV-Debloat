@@ -5,10 +5,26 @@ Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (
 
 **To do the same on your own TV,** paste [PROMPT.md](PROMPT.md) into Claude Code or another AI coding assistant that can run shell commands.
 
+<table>
+  <tr>
+    <th width="50%">Before: stock Android TV home</th>
+    <th width="50%">After: this launcher</th>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/launcher-old.jpg" width="100%" alt="Stock Android TV home screen with Favorite Apps, Play Next and AirConsole rows"></td>
+    <td width="50%"><img src="docs/launcher-new.jpg" width="100%" alt="New launcher: clock, prayer times, most used apps, system card, Now Playing and a five-app dock"></td>
+  </tr>
+  <tr>
+    <td valign="top">Rows of recommendations and sponsored content, with your apps squeezed into one line.</td>
+    <td valign="top">A clock with the Hijri date, prayer times, your most used apps, a live system card and Now Playing with media controls. Below them, a five-app dock with the focused app's name and a glow in its colour. Press Down for all other apps.</td>
+  </tr>
+</table>
+
 ```
 MiTV-Debloat/
 ├── README.md
 ├── PROMPT.md                    paste into an AI coding assistant to repeat this setup on another TV
+├── docs/                        README screenshots (before/after, phone remote)
 ├── backup/                      state captured BEFORE any change (local only, not in the repo: it identifies the TV)
 │   ├── disabled-by-us.txt       every package this project disabled (restore.sh reads it)
 │   ├── packages-*.txt           full package lists (all, system, third-party, disabled)
@@ -163,6 +179,19 @@ The card sits under the pills, starting at the Inputs pill. It shows:
 ### Phone remote
 
 Open **http://192.168.0.44:8486** on your phone, on the same Wi-Fi. Use **Add to Home Screen** to get an app icon.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/tvremote.jpg" alt="Remote tab: touchpad, Back, Home, Play/Pause, volume, keyboard"></td>
+    <td align="center" width="33%"><img src="docs/tvremote-applist.jpg" alt="Apps tab: dock apps, then all apps most used first"></td>
+    <td align="center" width="33%"><img src="docs/tvremote-sendfile.jpg" alt="Files tab: TV storage with upload"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Remote</b>: swipe to move, double-tap for OK, plus Back, Home, media, volume and typing</td>
+    <td align="center"><b>Apps</b>: the dock, then every app with the most used first. Tap to open on the TV</td>
+    <td align="center"><b>Files</b>: browse the TV's storage, upload from the phone, open files on the TV</td>
+  </tr>
+</table>
 
 **Pairing (once per phone):**
 1. Tap **Show PIN on TV**. A 4-digit PIN appears in the middle of the TV for 60 seconds.
