@@ -3,9 +3,12 @@
 TV: **Xiaomi Mi TV MOOQ0** ("croods", MediaTek, Android TV 10 / SDK 29, 1080p), at `192.168.0.44`.
 Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (`shots/`).
 
+**To do the same on your own TV,** paste [PROMPT.md](PROMPT.md) into Claude Code or another AI coding assistant that can run shell commands.
+
 ```
 MiTV-Debloat/
 ├── README.md
+├── PROMPT.md                    paste into an AI coding assistant to repeat this setup on another TV
 ├── backup/                      state captured BEFORE any change
 │   ├── disabled-by-us.txt       every package this project disabled (restore.sh reads it)
 │   ├── packages-*.txt           full package lists (all, system, third-party, disabled)
