@@ -211,6 +211,16 @@
         android:background="@drawable/peek_fade"
         android:importantForAccessibility="no" />
 
+    <!-- App list: shades the previous row as it scrolls under the top of the screen. -->
+    <View
+        android:id="@+id/gridTopFade"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_gravity="top"
+        android:alpha="0"
+        android:background="@drawable/grid_top_fade"
+        android:importantForAccessibility="no" />
+
     <LinearLayout
         android:id="@+id/menu"
         android:layout_width="240dp"

@@ -71,7 +71,10 @@ public class MainActivity extends Activity {
     private static final float TILE_SCALE = 1.1f, PILL_SCALE = 1.06f;
     // dp
     private static final int TILE_W = 152, TILE_H = 86, COL_W = 172, ROW_PITCH = 132;
-    private static final int GRID_TOP = 56, GRID_PAD_TOP = 14, GRID_PAD_BOTTOM = 48;
+    // The grid runs to the top of the screen (GRID_TOP 0) with its first row 70dp down, so the
+    // row above scrolls up under the top edge (shaded by gridTopFade) instead of vanishing at a
+    // hard edge 56dp down and leaving a blank band.
+    private static final int GRID_TOP = 0, GRID_PAD_TOP = 70, GRID_PAD_BOTTOM = 48;
     // PEEK: how much of the grid's first row shows under the dock on the home screen.
     // Focused dock app's name above the dock: line height (layout: 54dp) and gap to the dock.
     private static final int HERO_H = 54, HERO_GAP = 6;
@@ -114,7 +117,6 @@ public class MainActivity extends Activity {
     private List<AppEntry> apps = new ArrayList<>();
 
     private int section = DOCK, topIdx, dockIdx, gridIdx, menuIdx, nowIdx;
-    private int gridScroll;
     // Where the grid's scroll is heading (scrollGridToRow / return home); the highlight is placed
     // against this, so it goes straight to its final spot while the list scrolls under it.
     private int gridScrollTarget;
@@ -218,12 +220,6 @@ public class MainActivity extends Activity {
         grid.setHasFixedSize(true);
         grid.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         grid.setAdapter(adapter);
-        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
-                gridScroll += dy;
-            }
-        });
 
         // The highlight re-reads its target whenever anything is about to draw, so it follows
         // page slides, grid scrolls and tile scale animations without any polling.
@@ -550,9 +546,10 @@ public class MainActivity extends Activity {
                     .setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
             setHomeVisible(newSection != GRID, true);
             // Back on the home screen the peek shows the first row again.
-            if (newSection != GRID && gridScroll != 0) {
+            int scrolled = gridScroll();
+            if (newSection != GRID && scrolled != 0) {
                 gridScrollTarget = 0;
-                grid.smoothScrollBy(0, -gridScroll, new DecelerateInterpolator(2f));
+                grid.smoothScrollBy(0, -scrolled, new DecelerateInterpolator(2f));
             }
             system.setVisible(newSection != GRID);
             nowPlaying.setVisible(newSection != GRID);
@@ -579,6 +576,10 @@ public class MainActivity extends Activity {
 
     /** The clock, pills and dock fade out while the grid has the screen; the peek is dimmed on home. */
     private void setHomeVisible(boolean visible, boolean animate) {
+        View topFade = findViewById(R.id.gridTopFade);
+        topFade.animate().cancel();
+        if (animate) topFade.animate().alpha(visible ? 0f : 1f).setDuration(visible ? 220 : 320).start();
+        else topFade.setAlpha(visible ? 0f : 1f);
         grid.animate().cancel();
         if (animate) grid.animate().alpha(visible ? PEEK_ALPHA : 1f).setDuration(visible ? 320 : 220).start();
         else grid.setAlpha(visible ? PEEK_ALPHA : 1f);
@@ -627,6 +628,19 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * How far the grid is scrolled, read from the first laid-out row (all rows are the same
+     * height). Not tracked from onScrolled: that count drifted after data reloads (by whole rows),
+     * which left a gap at the top and cut off the bottom row.
+     */
+    private int gridScroll() {
+        if (grid.getChildCount() == 0) return 0;
+        View first = grid.getChildAt(0);
+        int pos = grid.getChildAdapterPosition(first);
+        if (pos == RecyclerView.NO_POSITION) return 0;
+        return (pos / COLS) * first.getHeight() + grid.getPaddingTop() - first.getTop();
+    }
+
     private void scrollGridToRow(int row, boolean smooth) {
         int rows = (apps.size() + COLS - 1) / COLS;
         int content = rows * px(ROW_PITCH) + px(GRID_PAD_TOP + GRID_PAD_BOTTOM);
@@ -634,7 +648,7 @@ public class MainActivity extends Activity {
         // Keep one row of context above the focused row.
         int target = Math.max(0, Math.min(max, (row - 1) * px(ROW_PITCH)));
         gridScrollTarget = target;
-        int dy = target - gridScroll;
+        int dy = target - gridScroll();
         if (dy == 0) return;
         if (smooth) grid.smoothScrollBy(0, dy, new DecelerateInterpolator(1.5f));
         else grid.scrollBy(0, dy);
@@ -682,7 +696,7 @@ public class MainActivity extends Activity {
         float cx = loc[0] - ox + v.getWidth() * cs / 2f;
         float cy = loc[1] - oy + v.getHeight() * cs / 2f;
         // Grid: where the tile will be once the scroll in progress finishes.
-        if (section == GRID) cy += gridScroll - gridScrollTarget;
+        if (section == GRID) cy += gridScroll() - gridScrollTarget;
         float hw = v.getWidth() * scale / 2f, hh = v.getHeight() * scale / 2f;
         highlight.moveTo(new RectF(cx - hw, cy - hh, cx + hw, cy + hh), radius, snap);
     }
