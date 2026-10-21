@@ -137,6 +137,20 @@ The top left shows the big clock with the date and Hijri date stacked beside it,
 - **Zone:** to use another zone, edit `prayer_zone` in `launcher/app/src/main/res/values/strings.xml` (e.g. `WLY01`, `JHR02`, see e-solat.gov.my), then run `scripts/build-and-install.sh`.
 - **Permission quirk:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
 
+### Connection indicator
+
+- **The Wi-Fi pill shows the state:**
+
+  | State | Icon | Text |
+  |---|---|---|
+  | Connected | green Wi-Fi | network name |
+  | Connected, no internet | amber Wi-Fi with a warning | **No internet** |
+  | Disconnected | red crossed-out Wi-Fi | **Disconnected** |
+
+- **Banner:** whenever the state changes, a small banner slides in at the top of the screen for a few seconds, **over any app**. It reads "Wi-Fi connected · name", "name · no internet" or "Wi-Fi disconnected". It's shown by the always-running phone-remote service and uses the overlay permission.
+- **"No internet"** uses Android's own internet check. It also appears behind a captive portal, and when Private DNS can't be reached.
+- **Settling:** changes are settled for 3 s, and a fresh connection gets 10 s to pass the internet check, so a normal reconnect doesn't flash "no internet".
+
 ### Now Playing
 
 Under the System card, whenever an app has a media session (RadioStream, Spotify, music apps):

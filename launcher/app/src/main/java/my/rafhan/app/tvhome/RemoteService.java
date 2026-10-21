@@ -14,6 +14,7 @@ import android.os.IBinder;
 public class RemoteService extends Service {
     private static final String CHANNEL = "remote";
     private RemoteServer server;
+    private NetBanner netBanner;
 
     @Override
     public void onCreate() {
@@ -28,6 +29,8 @@ public class RemoteService extends Service {
         startForeground(1, n);
         server = new RemoteServer(this);
         server.start();
+        netBanner = new NetBanner(this);
+        netBanner.start();
     }
 
     @Override
@@ -44,6 +47,7 @@ public class RemoteService extends Service {
     @Override
     public void onDestroy() {
         if (server != null) server.stop();
+        if (netBanner != null) netBanner.stop();
         super.onDestroy();
     }
 

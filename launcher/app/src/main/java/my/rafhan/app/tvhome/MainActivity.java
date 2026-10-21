@@ -934,23 +934,25 @@ public class MainActivity extends Activity {
         prayer.refresh();
     }
 
+    private int netShown = -1;
+    // Network callbacks fire while Android still reports the old network (e.g. onLost before the
+    // active network is cleared), so look again shortly after the last one.
+    private final Runnable netRecheck = this::updateNetwork;
+
+    /** Wi-Fi pill: network name, icon and colour for connected / no internet / disconnected. */
     private void updateNetwork() {
-        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
-        NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
-        String label;
-        if (nc == null) {
-            label = "Offline";
-        } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
-            label = "Ethernet";
-        } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            WifiInfo info = getApplicationContext().getSystemService(WifiManager.class).getConnectionInfo();
-            String ssid = info == null ? null : info.getSSID();
-            label = ssid == null || ssid.isEmpty() || WifiManager.UNKNOWN_SSID.equals(ssid)
-                    ? getString(R.string.wifi) : ssid.replaceAll("^\"|\"$", "");
-        } else {
-            label = "Connected";
-        }
+        NetState s = NetState.read(this);
+        String label = s.pillLabel();
         if (!label.contentEquals(pills[1].getText())) pills[1].setText(label);
+        if (s.state != netShown) {
+            netShown = s.state;
+            Drawable icon = getDrawable(s.icon()).mutate();
+            // Connected keeps the pill's normal white; problems are coloured.
+            int c = s.state == NetState.CONNECTED ? 0xE6FFFFFF : s.color();
+            icon.setTint(s.state == NetState.CONNECTED ? NetState.GREEN : c);
+            pills[1].setCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null);
+            pills[1].setTextColor(c);
+        }
         system.refreshNetwork();
         prayer.onNetworkAvailable();
     }
@@ -1008,11 +1010,15 @@ public class MainActivity extends Activity {
             @Override
             public void onAvailable(@NonNull Network network) {
                 main.post(MainActivity.this::updateNetwork);
+                main.removeCallbacks(netRecheck);
+                main.postDelayed(netRecheck, 1500);
             }
 
             @Override
             public void onLost(@NonNull Network network) {
                 main.post(MainActivity.this::updateNetwork);
+                main.removeCallbacks(netRecheck);
+                main.postDelayed(netRecheck, 1500);
             }
 
             @Override
