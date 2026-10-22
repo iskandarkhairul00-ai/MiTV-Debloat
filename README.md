@@ -22,7 +22,7 @@ Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (
 
 ## Demo
 
-https://github.com/user-attachments/assets/6f5390a4-30a9-4940-b559-e5ae69544472
+https://github.com/user-attachments/assets/8c54b279-a93a-4732-a06b-bfd6f9cd3b32
 
 Recorded on the TV (2 minutes, no sound): the dock's name and glow following focus, Now Playing, the running-apps screen and its hold-OK menu, Settings with wallpapers previewed as you move, the prayer zone list, and moving an app in the dock.
 
