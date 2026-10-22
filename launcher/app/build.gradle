@@ -10,8 +10,8 @@ android {
         applicationId 'my.rafhan.app.tvhome'
         minSdk 29          // the Mi TV runs Android 10
         targetSdk 36       // some Google TV 14 sets refuse old targets at install
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '1.2'
     }
 
     buildTypes {

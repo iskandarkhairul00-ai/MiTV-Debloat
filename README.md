@@ -8,23 +8,82 @@ Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (
 <table>
   <tr>
     <th width="50%">Before: stock Android TV home</th>
-    <th width="50%">After: this launcher</th>
+    <th width="50%">After: this launcher (v1.2)</th>
   </tr>
   <tr>
     <td width="50%"><img src="docs/launcher-old.jpg" width="100%" alt="Stock Android TV home screen with Favorite Apps, Play Next and AirConsole rows"></td>
-    <td width="50%"><img src="docs/launcher-new.jpg" width="100%" alt="New launcher: clock, prayer times, most used apps, system card, Now Playing and a five-app dock"></td>
+    <td width="50%"><img src="docs/home.jpg" width="100%" alt="New launcher over the Stargazer wallpaper: clock, Hijri date, prayer times, most used apps, system card, Now Playing and a five-app dock"></td>
   </tr>
   <tr>
     <td valign="top">Rows of recommendations and sponsored content, with your apps squeezed into one line.</td>
-    <td valign="top">A clock with the Hijri date, prayer times, your most used apps, a live system card and Now Playing with media controls. Below them, a five-app dock with the focused app's name and a glow in its colour. Press Down for all other apps.</td>
+    <td valign="top">Your apps, the time and what matters at a glance: prayer times, most used apps, a live system card and Now Playing, over a calm wallpaper.</td>
   </tr>
 </table>
+
+## Features
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/home.jpg" width="100%" alt="Home screen"></td>
+    <td width="50%"><img src="docs/app-grid.jpg" width="100%" alt="All apps grid"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Home</b>: big clock with the date and Hijri date, today's prayer times with a countdown, your most used apps this week, a system card (CPU, RAM, storage, network, USB debugging), Now Playing with cover art and controls, and a five-app dock you arrange yourself.</td>
+    <td valign="top"><b>All apps</b> (Down from the dock): five per row, most used first, with a glass focus highlight that springs from tile to tile. Hold OK on any app to add it to the dock.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/running-apps.jpg" width="100%" alt="Running apps screen"></td>
+    <td width="50%"><img src="docs/settings.jpg" width="100%" alt="Settings"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Running apps</b> (Up from the top bar): what's running, how much memory each app uses and what it's doing. OK force-closes; hold OK to hide an app from the list.</td>
+    <td valign="top"><b>Settings</b> (the gear): prayer zone (all 60 JAKIM zones), which cards show, 12/24-hour clock, wallpaper, what the bell tells you, the phone remote, and more. Changes apply straight away.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/dock-reorder.jpg" width="100%" alt="Hold OK on a dock app: Move, Remove from dock, Open"></td>
+    <td width="50%"><img src="docs/running-apps-hide.jpg" width="100%" alt="Hold OK on a running app: hide from this list, force close, open"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Your dock, your order</b>: hold OK on a dock app for <b>Move</b> (◀ ▶, then OK to place), <b>Remove from dock</b> or <b>Open</b>; hold OK on any app in the grid to add it. The phone remote can edit the dock too.</td>
+    <td valign="top"><b>Hide apps you never close</b>: hold OK on a running app and choose <b>Hide from this list</b>. Hidden apps wait under a "Hidden apps" row at the bottom, and Settings → Running apps brings them back.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/wallpapers.jpg" width="100%" alt="Wallpaper list"></td>
+    <td width="50%" valign="top">
+      <b>Also:</b>
+      <ul>
+        <li><b>Wallpapers</b>: seven photos from Wikimedia Commons, previewed as you move through the list, plus your own pictures from a <code>Wallpapers</code> folder.</li>
+        <li><b>Notifications bell</b>: Play Store updates, new HDMI devices, Bluetooth devices and low memory.</li>
+        <li><b>Connection banner</b> over any app when Wi-Fi drops or loses internet.</li>
+        <li><b>Inputs</b> menu for HDMI 1–3, AV and Live TV.</li>
+        <li>Light: a 0.6 MB app that uses about half the stock launcher's memory, with less than half its janky frames (<a href="#benchmark-this-launcher-vs-the-stock-launcher-2026-10-22">benchmark</a>).</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Wallpapers</b>: move to preview, OK to set. Add your own from the phone remote's Files tab.</td>
+    <td></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/tvremote.jpg" alt="Phone remote: touchpad, Back, Home, Play/Pause, volume, keyboard"></td>
+    <td align="center" width="33%"><img src="docs/tvremote-applist.jpg" alt="Phone remote: app list"></td>
+    <td align="center" width="33%"><img src="docs/tvremote-sendfile.jpg" alt="Phone remote: TV storage with upload"></td>
+  </tr>
+  <tr>
+    <td colspan="3" align="center"><b>Phone remote</b> in the phone's browser, no app to install: swipe to move, type into any app, open apps, switch inputs, edit the dock and send files to the TV. See <a href="#phone-remote">Phone remote</a>.</td>
+  </tr>
+</table>
+
+## Folder structure
 
 ```
 MiTV-Debloat/
 ├── README.md
 ├── PROMPT.md                    paste into an AI coding assistant to repeat this setup on another TV
-├── docs/                        README screenshots (before/after, phone remote)
+├── docs/                        README screenshots (before/after, features, phone remote)
 ├── backup/                      state captured BEFORE any change (local only, not in the repo: it identifies the TV)
 │   ├── disabled-by-us.txt       every package this project disabled (restore.sh reads it)
 │   ├── packages-*.txt           full package lists (all, system, third-party, disabled)
@@ -33,7 +92,7 @@ MiTV-Debloat/
 │   └── dumpsys/                 activities/services of every manufacturer package that was checked
 ├── launcher/                    the launcher source (Java, AndroidX RecyclerView, minSdk 29, targetSdk 36), incl. the phone remote
 ├── scripts/
-│   ├── build-and-install.sh     build the launcher (R8 release, ~0.5 MB APK), install it, make it the home screen
+│   ├── build-and-install.sh     build the launcher (R8 release, ~0.6 MB APK), install it, make it the home screen
 │   ├── benchmark.sh             measure a launcher's memory, CPU, start-up and smoothness
 │   ├── restore.sh               undo everything
 │   ├── disable.sh               disable packages (and log them so restore.sh can undo)
@@ -115,9 +174,10 @@ adb shell settings put global private_dns_mode opportunistic
 ## The launcher
 
 - **Dock:** Netflix · YouTube · TV Manager · Gallery · Play Store by default (change it from the TV or phone, see "Change the dock"). The focused app's name appears large above the dock, with a glow in a colour taken from its banner.
-- **Top bar:**
+- **Top bar** (round icon buttons):
+  - **Bell** shows notifications (see below).
   - **Inputs** opens a dropdown with HDMI 1–3, AV and Live TV. It switches through the TV input framework.
-  - **Wi-Fi** shows the network name and opens Wi-Fi settings.
+  - **Wi-Fi** shows the connection state by colour and opens Wi-Fi settings.
   - **Settings** (gear) opens the launcher's own Settings (see below); its last row, **About → TV settings**, opens the TV's Settings.
 - **Remote:**
   - Down from the dock slides up to all other apps (5 per row). Up/Down always move exactly one row.
@@ -126,8 +186,8 @@ adb shell settings put global private_dns_mode opportunistic
   - Back returns to the dock.
   - Home while already home jumps back to the dock.
 - **Focus memory:** the last focused tile is remembered, even if the TV kills the launcher.
-- **Resource use:** about 90 MB of RAM and 0% CPU when idle. There is no blur, video or network polling; the clock updates from the system's minute tick.
-- **New apps:** they appear automatically, sorted A–Z.
+- **Resource use:** about 45–75 MB of memory (see the benchmark). There is no blur, video or network polling; the clock updates from the system's minute tick.
+- **New apps:** they appear automatically; the grid lists your most used apps first, then the rest A–Z.
 
 ### Date, Hijri date and prayer times
 
