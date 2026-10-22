@@ -1,6 +1,6 @@
 # The prompt
 
-Paste everything below the line into Claude Code (or another coding assistant that can run shell commands) on a computer on the **same Wi-Fi as the TV**. It debloats the TV and replaces the home screen with a fast, Apple TV style launcher like the one in this repo.
+Paste everything below the line into any AI coding agent that can run shell commands, on a computer on the **same Wi-Fi as the TV**. It debloats the TV and replaces the home screen with a fast, Apple TV style launcher like the one in this repo.
 
 It was written for a **Xiaomi Mi TV (Android TV 10, MediaTek)**, but works on most Android TV and Google TV sets (Xiaomi, TCL, Sony, Philips, Hisense, Chromecast with Google TV…). It does **not** work on Samsung (Tizen), LG (webOS) or Fire TV.
 

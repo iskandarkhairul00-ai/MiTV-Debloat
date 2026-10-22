@@ -3,7 +3,7 @@
 TV: **Xiaomi Mi TV MOOQ0** ("croods", MediaTek, Android TV 10 / SDK 29, 1080p), at `192.168.0.44`.
 Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (`shots/`).
 
-**To do the same on your own TV,** paste [PROMPT.md](PROMPT.md) into Claude Code or another AI coding assistant that can run shell commands.
+**To do the same on your own TV,** paste [PROMPT.md](PROMPT.md) into any AI coding agent that can run shell commands on your computer.
 
 <table>
   <tr>
@@ -19,6 +19,12 @@ Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (
     <td valign="top">Your apps, the time and what matters at a glance: prayer times, most used apps, a live system card and Now Playing, over a calm wallpaper.</td>
   </tr>
 </table>
+
+## Demo
+
+https://github.com/user-attachments/assets/6f5390a4-30a9-4940-b559-e5ae69544472
+
+Recorded on the TV (2 minutes, no sound): the dock's name and glow following focus, Now Playing, the running-apps screen and its hold-OK menu, Settings with wallpapers previewed as you move, the prayer zone list, and moving an app in the dock.
 
 ## Features
 
