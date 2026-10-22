@@ -102,6 +102,7 @@ final class NetBanner {
     }
 
     private void show(NetState s, boolean wasWifi) {
+        if (!LauncherSettings.flag(ctx, LauncherSettings.NET_BANNER)) return; // Settings → Notifications
         showMessage(s.icon(), s.color(), s.bannerLabel(wasWifi), s.state == NetState.CONNECTED ? SHOW_MS : SHOW_MS * 2);
     }
 

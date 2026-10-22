@@ -118,7 +118,7 @@ adb shell settings put global private_dns_mode opportunistic
 - **Top bar:**
   - **Inputs** opens a dropdown with HDMI 1–3, AV and Live TV. It switches through the TV input framework.
   - **Wi-Fi** shows the network name and opens Wi-Fi settings.
-  - **Settings** opens the TV's Settings.
+  - **Settings** (gear) opens the launcher's own Settings (see below); its last row, **About → TV settings**, opens the TV's Settings.
 - **Remote:**
   - Down from the dock slides up to all other apps (5 per row). Up/Down always move exactly one row.
   - Up from the dock goes to the top bar. Up from the top bar slides down the running-apps screen (see below).
@@ -134,7 +134,7 @@ adb shell settings put global private_dns_mode opportunistic
 The top left shows the big clock with the date and Hijri date stacked beside it, level with the pills. Below it, the prayer card's top lines up with the system card's. It shows today's Fajr, Dhuhr, Asr, Maghrib and Isya from JAKIM e-solat. The next prayer is in gold, with a countdown in the card's header. After Isya it shows tomorrow's Fajr.
 
 - **Fetching:** the whole month is fetched once from `esolatApi/takwimsolat&period=month&zone=SGR03` and cached on the TV. It's fetched again only when the month changes. If there's no network, it retries when the network comes back, at most once a minute. The display updates on the clock's minute tick.
-- **Zone:** to use another zone, edit `prayer_zone` in `launcher/app/src/main/res/values/strings.xml` (e.g. `WLY01`, `JHR02`, see e-solat.gov.my), then run `scripts/build-and-install.sh`.
+- **Zone:** pick it in **Settings → Prayer times → Zone** (all 60 JAKIM zones, from e-solat.gov.my). The card switches straight away and fetches that zone's month. `prayer_zone` in strings.xml is only the default.
 - **Permission quirk:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
 
 ### Notifications (bell)
@@ -191,6 +191,19 @@ Press **Up** on the top bar and the home screen slides away. A screen with three
 - **USB debugging off:** the launcher can only use Android's background kill (`KILL_BACKGROUND_PROCESSES`). It can't stop apps that are on screen or running a service, and the screen says so. Memory isn't shown.
 - **Refresh:** the list is read when the screen opens and after each close. Nothing runs while the screen is closed.
 
+### Settings (gear)
+
+The gear at the end of the top bar opens the launcher's Settings: categories on the left, their options on the right (laid out like [Matinee](https://github.com/Jarvis322/matinee)'s). Left/Right switch sides, OK changes the focused option (switches flip, choices cycle, ›-rows open a list), Back steps out (list → options → categories → home). Changes apply straight away and are kept in the launcher's `settings` prefs. Everything starts as the launcher behaved before Settings existed.
+
+| Category | Options |
+|---|---|
+| Home screen | Clock Auto / 12-hour / 24-hour, Most used card, Most used: leave out (app picker), System card, Now Playing card, wallpaper dim (Off/Low/Medium/High), remove wallpaper. A hidden card's column closes up. |
+| Prayer times | Zone (picker), prayer card on/off |
+| Notifications | Play Store updates, new HDMI devices, Bluetooth, low memory (each on/off), low-memory level 80/85/90 %, connection banner |
+| Phone remote | Remote on/off (the banner and bell keep working when it's off), its address, forget all paired phones (press OK twice) |
+| Running apps | Apps hidden from the running-apps screen; OK shows one again |
+| About | Version, install time, APK size, TV settings |
+
 ### Most used apps (last 7 days)
 
 - **The card:** under the prayer card, it shows your top 5 apps over a rolling 7 days, each with its time and a bar, plus the total.
@@ -198,7 +211,7 @@ Press **Up** on the top bar and the home screen slides away. A screen with three
 - **How time is counted, per day:**
   - **Visible time.** This counts watching HDMI or tuner through Live TV, which Android barely counts as "foreground".
   - **Background playback (e.g. RadioStream audio)**, but only on days the app was also on screen. On this TV a group of always-on services, such as the NetSpeedTime overlay, MiLink and Live TV's service, log identical whole-day service times that aren't real use.
-- **Excluded apps:** Live TV (`com.mediatek.wwtv.tvcenter`) is left out of the ranking. It's only the screen for HDMI, AV and the antenna, so its time is input-watching time, not app use. It isn't on the card or in the total, and it stays in A–Z order in the grid. To exclude more apps, edit `usage_excluded` in `launcher/app/src/main/res/values/apps.xml` and rebuild.
+- **Excluded apps:** Live TV (`com.mediatek.wwtv.tvcenter`) is left out of the ranking. It's only the screen for HDMI, AV and the antenna, so its time is input-watching time, not app use. It isn't on the card or in the total, and it stays in A–Z order in the grid. To leave out more apps, tick them in **Settings → Home screen → Most used: leave out** (`usage_excluded` in apps.xml is only the default).
 - **Usage access:** granted by `scripts/build-and-install.sh` with `adb shell appops set my.rafhan.app.tvhome GET_USAGE_STATS allow`. Without it the card shows that command and the grid stays A–Z.
 - **History:** Android keeps daily usage detail for about a week, which is exactly what the card needs.
 
@@ -321,7 +334,7 @@ The background is pitch black by default. To use a picture (ideally 1920×1080, 
 ```bash
 adb push mypicture.jpg /sdcard/Android/data/my.rafhan.app.tvhome/files/wallpaper.jpg
 ```
-Open any app and press Home: the picture shows up, dimmed so text stays readable. To go back to black:
+Open any app and press Home: the picture shows up, dimmed so text stays readable (how much: **Settings → Home screen → Wallpaper dim**). To go back to black, use **Settings → Home screen → Remove wallpaper**, or:
 ```bash
 adb shell rm /sdcard/Android/data/my.rafhan.app.tvhome/files/wallpaper.jpg
 ```

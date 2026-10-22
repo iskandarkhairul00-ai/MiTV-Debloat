@@ -11,7 +11,7 @@ import android.os.IBinder;
  * Keeps the phone remote's HTTP server alive while other apps are on screen. Started by
  * MainActivity (the launcher is started at boot, so no boot receiver is needed).
  */
-public class RemoteService extends Service {
+public class RemoteService extends Service implements LauncherSettings.Listener {
     private static final String CHANNEL = "remote";
     private RemoteServer server;
     private NetBanner netBanner;
@@ -22,18 +22,40 @@ public class RemoteService extends Service {
         super.onCreate();
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Phone remote", NotificationManager.IMPORTANCE_MIN));
-        Notification n = new Notification.Builder(this, CHANNEL)
-                .setSmallIcon(R.drawable.ic_home)
-                .setContentTitle("Phone remote")
-                .setContentText("Port " + RemoteServer.PORT)
-                .build();
-        startForeground(1, n);
-        server = new RemoteServer(this);
-        server.start();
+        startForeground(1, notification());
+        // Settings → Phone remote can switch the server off; the banner and alerts keep running.
+        if (LauncherSettings.flag(this, LauncherSettings.REMOTE)) startServer();
+        LauncherSettings.addListener(this);
         netBanner = new NetBanner(this);
         netBanner.start();
         alertSources = new AlertSources(this, netBanner);
         alertSources.start();
+    }
+
+    private Notification notification() {
+        boolean on = LauncherSettings.flag(this, LauncherSettings.REMOTE);
+        return new Notification.Builder(this, CHANNEL)
+                .setSmallIcon(R.drawable.ic_home)
+                .setContentTitle("Phone remote")
+                .setContentText(on ? "Port " + RemoteServer.PORT : "Off")
+                .build();
+    }
+
+    private void startServer() {
+        server = new RemoteServer(this);
+        server.start();
+    }
+
+    @Override
+    public void onSettingChanged(String key) {
+        if (!LauncherSettings.REMOTE.equals(key)) return;
+        boolean on = LauncherSettings.flag(this, LauncherSettings.REMOTE);
+        if (on && server == null) startServer();
+        if (!on && server != null) {
+            server.stop();
+            server = null;
+        }
+        getSystemService(NotificationManager.class).notify(1, notification());
     }
 
     @Override
@@ -49,6 +71,7 @@ public class RemoteService extends Service {
 
     @Override
     public void onDestroy() {
+        LauncherSettings.removeListener(this);
         if (server != null) server.stop();
         if (netBanner != null) netBanner.stop();
         if (alertSources != null) alertSources.stop();

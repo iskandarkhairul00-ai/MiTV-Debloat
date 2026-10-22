@@ -6,11 +6,11 @@ import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.os.Process;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Per-app use over the last 7 days, shared by the Most used card, the grid order and the phone
@@ -36,7 +36,7 @@ final class UsageScores {
     /** Package -> milliseconds in use over the last 7 days. Empty without Usage access. */
     static Map<String, Long> week(Context ctx) {
         if (!granted(ctx)) return Collections.emptyMap();
-        List<String> excluded = Arrays.asList(ctx.getResources().getStringArray(R.array.usage_excluded));
+        Set<String> excluded = LauncherSettings.usageExcluded(ctx); // Settings → Home screen
         long end = System.currentTimeMillis(), begin = end - WINDOW_MS;
         Map<String, Long> scores = new HashMap<>();
         List<UsageStats> stats = ctx.getSystemService(UsageStatsManager.class)

@@ -317,7 +317,7 @@ final class RemoteServer {
         pin = String.format(Locale.ROOT, "%04d", random.nextInt(10000));
         pinUntil = now + PIN_MS;
         pinTries = 0;
-        overlay.show(pin, lanUrl(), PIN_MS);
+        overlay.show(pin, lanUrl(ctx), PIN_MS);
         return new Object[] {200, ok()};
     }
 
@@ -355,6 +355,11 @@ final class RemoteServer {
 
     private boolean authorised(String token) {
         return token != null && !token.isEmpty() && prefs.getStringSet("tokens", new HashSet<>()).contains(token);
+    }
+
+    /** Settings → Forget all paired phones: every phone has to pair with a PIN again. */
+    static void forgetAll(Context ctx) {
+        ctx.getSharedPreferences("remote", Context.MODE_PRIVATE).edit().remove("tokens").apply();
     }
 
     private void unpair(String token) {
@@ -570,7 +575,7 @@ final class RemoteServer {
     // ---------------------------------------------------------------- helpers
 
     /** e.g. http://192.168.0.44:8486, for the PIN card. */
-    private String lanUrl() {
+    static String lanUrl(Context ctx) {
         ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
         Network net = cm.getActiveNetwork();
         LinkProperties lp = net == null ? null : cm.getLinkProperties(net);

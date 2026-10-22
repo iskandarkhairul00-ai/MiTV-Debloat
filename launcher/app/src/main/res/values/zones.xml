@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- JAKIM prayer-time zones from e-solat.gov.my (Settings → Prayer times → Zone), "State|CODE|Areas". -->
+<resources>
+    <string-array name="prayer_zones" translatable="false">
+        <item>Johor|JHR01|Pulau Aur dan Pulau Pemanggil</item>
+        <item>Johor|JHR02|Johor Bahru, Kota Tinggi, Mersing, Kulai</item>
+        <item>Johor|JHR03|Kluang, Pontian</item>
+        <item>Johor|JHR04|Batu Pahat, Muar, Segamat, Gemas Johor, Tangkak</item>
+        <item>Kedah|KDH01|Kota Setar, Kubang Pasu, Pokok Sena (Daerah Kecil)</item>
+        <item>Kedah|KDH02|Kuala Muda, Yan, Pendang</item>
+        <item>Kedah|KDH03|Padang Terap, Sik</item>
+        <item>Kedah|KDH04|Baling</item>
+        <item>Kedah|KDH05|Bandar Baharu, Kulim</item>
+        <item>Kedah|KDH06|Langkawi</item>
+        <item>Kedah|KDH07|Puncak Gunung Jerai</item>
+        <item>Kelantan|KTN01|Bachok, Kota Bharu, Machang, Pasir Mas, Pasir Puteh, Tanah Merah, Tumpat, Kuala Krai, Mukim Chiku</item>
+        <item>Kelantan|KTN02|Gua Musang (Daerah Galas Dan Bertam), Jeli, Jajahan Kecil Lojing</item>
+        <item>Melaka|MLK01|Seluruh Negeri Melaka</item>
+        <item>Negeri Sembilan|NGS01|Tampin, Jempol</item>
+        <item>Negeri Sembilan|NGS02|Jelebu, Kuala Pilah, Rembau</item>
+        <item>Negeri Sembilan|NGS03|Port Dickson, Seremban</item>
+        <item>Pahang|PHG01|Pulau Tioman</item>
+        <item>Pahang|PHG02|Kuantan, Pekan, Muadzam Shah</item>
+        <item>Pahang|PHG03|Jerantut, Temerloh, Maran, Bera, Chenor, Jengka</item>
+        <item>Pahang|PHG04|Bentong, Lipis, Raub</item>
+        <item>Pahang|PHG05|Genting Sempah, Janda Baik, Bukit Tinggi</item>
+        <item>Pahang|PHG06|Cameron Highlands, Genting Higlands, Bukit Fraser</item>
+        <item>Pahang|PHG07|Daerah Rompin, (Mukim Rompin, Mukim Endau, Mukim Pontian)</item>
+        <item>Perlis|PLS01|Kangar, Padang Besar, Arau</item>
+        <item>Pulau Pinang|PNG01|Seluruh Negeri Pulau Pinang</item>
+        <item>Perak|PRK01|Tapah, Slim River, Tanjung Malim</item>
+        <item>Perak|PRK02|Kuala Kangsar, Sg. Siput, Ipoh, Batu Gajah, Kampar</item>
+        <item>Perak|PRK03|Lenggong, Pengkalan Hulu, Grik</item>
+        <item>Perak|PRK04|Temengor, Belum</item>
+        <item>Perak|PRK05|Kg Gajah, Teluk Intan, Bagan Datuk, Seri Iskandar, Beruas, Parit, Lumut, Sitiawan, Pulau Pangkor</item>
+        <item>Perak|PRK06|Selama, Taiping, Bagan Serai, Parit Buntar</item>
+        <item>Perak|PRK07|Bukit Larut</item>
+        <item>Sabah|SBH01|Bahagian Sandakan (Timur), Bukit Garam, Semawang, Temanggong, Tambisan, Bandar Sandakan, Sukau</item>
+        <item>Sabah|SBH02|Beluran, Telupid, Pinangah, Terusan, Kuamut, Bahagian Sandakan (Barat)</item>
+        <item>Sabah|SBH03|Lahad Datu, Silabukan, Kunak, Sahabat, Semporna, Tungku, Bahagian Tawau (Timur)</item>
+        <item>Sabah|SBH04|Bandar Tawau, Balong, Merotai, Kalabakan, Bahagian Tawau (Barat)</item>
+        <item>Sabah|SBH05|Kudat, Kota Marudu, Pitas, Pulau Banggi, Bahagian Kudat</item>
+        <item>Sabah|SBH06|Gunung Kinabalu</item>
+        <item>Sabah|SBH07|Kota Kinabalu, Ranau, Kota Belud, Tuaran, Penampang, Papar, Putatan, Bahagian Pantai Barat</item>
+        <item>Sabah|SBH08|Pensiangan, Keningau, Tambunan, Nabawan, Bahagian Pendalaman (Atas)</item>
+        <item>Sabah|SBH09|Beaufort, Kuala Penyu, Sipitang, Tenom, Long Pasia, Membakut, Weston, Bahagian Pendalaman (Bawah)</item>
+        <item>Selangor|SGR01|Gombak, Petaling, Sepang, Hulu Langat, Hulu Selangor, S.Alam</item>
+        <item>Selangor|SGR02|Kuala Selangor, Sabak Bernam</item>
+        <item>Selangor|SGR03|Klang, Kuala Langat</item>
+        <item>Sarawak|SWK01|Limbang, Lawas, Sundar, Trusan</item>
+        <item>Sarawak|SWK02|Miri, Niah, Bekenu, Sibuti, Marudi</item>
+        <item>Sarawak|SWK03|Pandan, Belaga, Suai, Tatau, Sebauh, Bintulu</item>
+        <item>Sarawak|SWK04|Sibu, Mukah, Dalat, Song, Igan, Oya, Balingian, Kanowit, Kapit</item>
+        <item>Sarawak|SWK05|Sarikei, Matu, Julau, Rajang, Daro, Bintangor, Belawai</item>
+        <item>Sarawak|SWK06|Lubok Antu, Sri Aman, Roban, Debak, Kabong, Lingga, Engkelili, Betong, Spaoh, Pusa, Saratok</item>
+        <item>Sarawak|SWK07|Serian, Simunjan, Samarahan, Sebuyau, Meludam</item>
+        <item>Sarawak|SWK08|Kuching, Bau, Lundu, Sematan</item>
+        <item>Sarawak|SWK09|Zon Khas (Kampung Patarikan)</item>
+        <item>Terengganu|TRG01|Kuala Terengganu, Marang, Kuala Nerus</item>
+        <item>Terengganu|TRG02|Besut, Setiu</item>
+        <item>Terengganu|TRG03|Hulu Terengganu</item>
+        <item>Terengganu|TRG04|Dungun, Kemaman</item>
+        <item>Wilayah Persekutuan|WLY01|Kuala Lumpur, Putrajaya</item>
+        <item>Wilayah Persekutuan|WLY02|Labuan</item>
+    </string-array>
+</resources>

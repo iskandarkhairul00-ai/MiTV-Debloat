@@ -65,7 +65,7 @@ import java.util.concurrent.Executors;
  * outcome: Up/Down move one row, Up from the dock goes to the top bar, row and bar ends stop.
  */
 public class MainActivity extends Activity {
-    private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4, UP = 5;
+    private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4, UP = 5, SETTINGS = 6;
     private static final float NOW_SCALE = 1.12f;
     private static final int RIGHT_CARD_W = 412; // System and Now Playing cards, dp
     private static final int COLS = 5, DOCK_SIZE = DockConfig.MAX;
@@ -102,6 +102,8 @@ public class MainActivity extends Activity {
     private SystemPanel system;
     private NowPlayingPanel nowPlaying;
     private UpScreen up;
+    private SettingsScreen settingsScreen;
+    private FrameLayout settingsPage;
     private FrameLayout upPage;
     private PrayerPanel prayer;
     private UsagePanel usage;
@@ -284,6 +286,25 @@ public class MainActivity extends Activity {
         ContextCompat.registerReceiver(this, packageReceiver, pf, ContextCompat.RECEIVER_EXPORTED);
 
         DockConfig.addListener(dockChanged);
+        settingsPage = findViewById(R.id.settingsPage);
+        settingsScreen = new SettingsScreen(this, settingsPage, worker, new SettingsScreen.Host() {
+            @Override
+            public void onFocusMoved() {
+                settingsPage.invalidate();
+            }
+
+            @Override
+            public void openTvSettings() {
+                startSafely(new Intent(Settings.ACTION_SETTINGS));
+            }
+
+            @Override
+            public void wallpaperRemoved() {
+                loadWallpaper();
+            }
+        });
+        LauncherSettings.addListener(settingsChanged);
+        applyCardSettings();
         loadApps(); // restores focus when the list arrives
         startForegroundService(new Intent(this, RemoteService.class));
     }
@@ -362,18 +383,24 @@ public class MainActivity extends Activity {
             }
         });
         // Now Playing sits under the system card, same width and edges.
-        View np = findViewById(R.id.nowPlaying);
-        card.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) np.getLayoutParams();
-            ViewGroup.MarginLayoutParams sp = (ViewGroup.MarginLayoutParams) card.getLayoutParams();
-            int top = b + px(10);
-            if (lp.width != r - l || lp.getMarginEnd() != sp.getMarginEnd() || lp.topMargin != top) {
-                lp.width = r - l;
-                lp.setMarginEnd(sp.getMarginEnd());
-                lp.topMargin = top;
-                np.post(() -> np.setLayoutParams(lp));
-            }
-        });
+        card.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeNowPlaying());
+    }
+
+    /** Now Playing: under the system card, same width and edges; in its place when it's off. */
+    private void placeNowPlaying() {
+        View card = findViewById(R.id.sysPanel), np = findViewById(R.id.nowPlaying);
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) np.getLayoutParams();
+        ViewGroup.MarginLayoutParams sp = (ViewGroup.MarginLayoutParams) card.getLayoutParams();
+        boolean below = card.getVisibility() != View.GONE;
+        if (below && card.getBottom() == 0) return; // not laid out yet
+        int top = below ? card.getBottom() + px(10) : sp.topMargin;
+        int width = sp.width > 0 ? sp.width : card.getWidth();
+        if (lp.width != width || lp.getMarginEnd() != sp.getMarginEnd() || lp.topMargin != top) {
+            lp.width = width;
+            lp.setMarginEnd(sp.getMarginEnd());
+            lp.topMargin = top;
+            np.post(() -> np.setLayoutParams(lp));
+        }
 
     }
 
@@ -584,6 +611,7 @@ public class MainActivity extends Activity {
             case GRID: return gridIdx;
             case NOW: return nowIdx;
             case UP: return upIdx;
+            case SETTINGS: return 0;
             default: return menuIdx;
         }
     }
@@ -598,6 +626,7 @@ public class MainActivity extends Activity {
             case GRID: gridIdx = newIndex; break;
             case NOW: nowIdx = newIndex; break;
             case UP: upIdx = newIndex; break;
+            case SETTINGS: break; // SettingsScreen keeps its own focus
             default: menuIdx = newIndex; break;
         }
         applyLook(section, newIndex, true, true);
@@ -607,12 +636,29 @@ public class MainActivity extends Activity {
             page.animate().translationY(y).setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
             upPage.animate().translationY(y - screenH).setDuration(420)
                     .setInterpolator(new DecelerateInterpolator(2f)).start();
-            system.setVisible(!onUpPage(newSection));
+            setSystemVisible(!onUpPage(newSection));
             nowPlaying.setVisible(!onUpPage(newSection));
             if (onUpPage(newSection)) up.reload();
             else up.resetStatus();
         }
         if (newSection == UP) up.setFocused(newIndex);
+        // Settings (gear) fades in over home.
+        if ((oldSection == SETTINGS) != (newSection == SETTINGS)) {
+            boolean open = newSection == SETTINGS;
+            page.animate().alpha(open ? 0f : 1f).setDuration(220).start();
+            bellBadge.animate().alpha(open ? 0f : 1f).setDuration(220).start();
+            settingsPage.animate().cancel();
+            if (open) {
+                settingsPage.setAlpha(0f);
+                settingsPage.setVisibility(View.VISIBLE);
+                settingsPage.animate().alpha(1f).setDuration(220).start();
+            } else {
+                settingsPage.animate().alpha(0f).setDuration(180)
+                        .withEndAction(() -> settingsPage.setVisibility(View.GONE)).start();
+            }
+            setSystemVisible(!open);
+            nowPlaying.setVisible(!open);
+        }
         if (onGridPage(oldSection) != onGridPage(newSection)) {
             boolean toGrid = onGridPage(newSection);
             page.animate().translationY(toGrid ? -gridShift() : 0)
@@ -624,7 +670,7 @@ public class MainActivity extends Activity {
                 gridScrollTarget = 0;
                 grid.smoothScrollBy(0, -scrolled, new DecelerateInterpolator(2f));
             }
-            system.setVisible(!toGrid);
+            setSystemVisible(!toGrid);
             nowPlaying.setVisible(!toGrid);
         }
         if (newSection == GRID) scrollGridToRow(newIndex / COLS, true);
@@ -650,8 +696,8 @@ public class MainActivity extends Activity {
         for (int i = 0; i < NowPlayingPanel.BUTTONS; i++) applyLook(NOW, i, section == NOW && i == nowIdx, false);
         adapter.notifyDataSetChanged();
         setHomeVisible(!onGridPage(section), false);
-        system.setVisible(!onGridPage(section) && !onUpPage(section));
-        nowPlaying.setVisible(!onGridPage(section) && !onUpPage(section));
+        setSystemVisible(!onGridPage(section) && !onUpPage(section) && section != SETTINGS);
+        nowPlaying.setVisible(!onGridPage(section) && !onUpPage(section) && section != SETTINGS);
         updateHero(false);
         page.invalidate();
     }
@@ -767,14 +813,18 @@ public class MainActivity extends Activity {
             case UP:
                 v = up.row(upIdx);
                 break;
+            case SETTINGS:
+                v = settingsScreen.focused();
+                break;
         }
         // Nothing to frame while the running-apps list is empty or loading.
-        highlight.setVisibility(section == UP && v == null ? View.INVISIBLE : View.VISIBLE);
+        highlight.setVisibility((section == UP || section == SETTINGS) && v == null ? View.INVISIBLE : View.VISIBLE);
         if (v == null || v.getWidth() == 0) return;
         // Frame the highlight rides with: the menu (fixed), the grid (page slide + list scroll),
         // or the rest of the page (page slide).
         if (section == MENU) highlight.setFrame(0, 0);
         else if (section == UP) highlight.setFrame(3, upPage.getTranslationY());
+        else if (section == SETTINGS) highlight.setFrame(4, 0);
         else if (section == GRID) highlight.setFrame(2 + gridScrollTarget, page.getTranslationY() - gridScrollTarget);
         else highlight.setFrame(1, page.getTranslationY());
         highlight.getLocationInWindow(loc);
@@ -881,6 +931,10 @@ public class MainActivity extends Activity {
 
     private void onUp() {
         if (editMode != EDIT_NONE) return; // finish (OK) or cancel (Back) first
+        if (section == SETTINGS) {
+            settingsScreen.up();
+            return;
+        }
         switch (section) {
             case DOCK:
                 if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
@@ -911,6 +965,10 @@ public class MainActivity extends Activity {
 
     private void onDown() {
         if (editMode != EDIT_NONE) return;
+        if (section == SETTINGS) {
+            settingsScreen.down();
+            return;
+        }
         int n = apps.size();
         switch (section) {
             case TOP:
@@ -940,6 +998,11 @@ public class MainActivity extends Activity {
     }
 
     private void onSide(int dir) {
+        if (section == SETTINGS) {
+            if (dir < 0) settingsScreen.left();
+            else settingsScreen.right();
+            return;
+        }
         if (editMode == EDIT_MOVE) {
             shiftDockApp(dir);
             return;
@@ -980,6 +1043,9 @@ public class MainActivity extends Activity {
             return;
         }
         switch (section) {
+            case SETTINGS:
+                settingsScreen.select();
+                break;
             case UP:
                 int kind = up.kind(upIdx);
                 if (kind == UpScreen.FOOTER) up.toggleHidden();
@@ -989,7 +1055,8 @@ public class MainActivity extends Activity {
             case TOP:
                 if (topIdx == PILL_BELL) openBell();
                 else if (topIdx == PILL_INPUTS) openMenu();
-                else startSafely(new Intent(topIdx == PILL_WIFI ? Settings.ACTION_WIFI_SETTINGS : Settings.ACTION_SETTINGS));
+                else if (topIdx == PILL_WIFI) startSafely(new Intent(Settings.ACTION_WIFI_SETTINGS));
+                else openSettings();
                 break;
             case DOCK:
                 if (dockIdx < dock.size()) launch(dock.get(dockIdx));
@@ -1022,7 +1089,9 @@ public class MainActivity extends Activity {
             return;
         }
         if (section == MENU) closeMenu();
-        else if (section == UP) moveFocus(TOP, topIdx);
+        else if (section == SETTINGS) {
+            if (settingsScreen.back()) moveFocus(TOP, PILL_SETTINGS);
+        } else if (section == UP) moveFocus(TOP, topIdx);
         else if (section == GRID || section == TOP || section == NOW) {
             if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
         }
@@ -1232,6 +1301,67 @@ public class MainActivity extends Activity {
         menuReturnSection = TOP;
     }
 
+    // ---------------------------------------------------------------- settings
+
+    private void openSettings() {
+        settingsScreen.open();
+        moveFocus(SETTINGS, 0);
+    }
+
+    /** A setting changed (Settings page): apply it to what's on screen. */
+    private final LauncherSettings.Listener settingsChanged = key -> {
+        switch (key) {
+            case LauncherSettings.ZONE:
+                prayer.setZone(LauncherSettings.zone(this));
+                break;
+            case LauncherSettings.CLOCK:
+                updateClock(); // also re-renders the prayer times
+                break;
+            case LauncherSettings.SHOW_PRAYER:
+            case LauncherSettings.SHOW_USAGE:
+            case LauncherSettings.SHOW_SYSTEM:
+            case LauncherSettings.SHOW_NOW:
+                applyCardSettings();
+                break;
+            case LauncherSettings.WALL_DIM:
+                applyWallpaperDim();
+                break;
+            case LauncherSettings.USAGE_EXCLUDED:
+                refreshUsage();
+                break;
+            default:
+                break;
+        }
+    };
+
+    /**
+     * Shows or hides the home cards. Each column stacks what's left from the top: Most used moves
+     * up when the prayer card is off, Now Playing moves up when the System card is off.
+     */
+    private void applyCardSettings() {
+        View prayerCard = findViewById(R.id.prayerPanel), usageCard = findViewById(R.id.usagePanel);
+        boolean showPrayer = LauncherSettings.flag(this, LauncherSettings.SHOW_PRAYER);
+        prayerCard.setVisibility(showPrayer ? View.VISIBLE : View.GONE);
+        usageCard.setVisibility(LauncherSettings.flag(this, LauncherSettings.SHOW_USAGE) ? View.VISIBLE : View.GONE);
+        ViewGroup.MarginLayoutParams ulp = (ViewGroup.MarginLayoutParams) usageCard.getLayoutParams();
+        ulp.topMargin = showPrayer ? px(10) : 0;
+        usageCard.setLayoutParams(ulp);
+        findViewById(R.id.sysPanel).setVisibility(showSystem() ? View.VISIBLE : View.GONE);
+        setSystemVisible(!onGridPage(section) && !onUpPage(section) && section != SETTINGS);
+        if (!LauncherSettings.flag(this, LauncherSettings.SHOW_NOW)) nowPlaying.disable();
+        else if (live) nowPlaying.start();
+        placeNowPlaying();
+    }
+
+    private boolean showSystem() {
+        return LauncherSettings.flag(this, LauncherSettings.SHOW_SYSTEM);
+    }
+
+    /** The System card only samples while it's on screen and switched on. */
+    private void setSystemVisible(boolean onScreen) {
+        system.setVisible(onScreen && showSystem());
+    }
+
     // ---------------------------------------------------------------- dock editing
 
     /**
@@ -1320,7 +1450,7 @@ public class MainActivity extends Activity {
 
     private void updateClock() {
         Calendar c = Calendar.getInstance();
-        clock.setText(DateFormat.format(DateFormat.is24HourFormat(this) ? "HH:mm" : "h:mm", c));
+        clock.setText(DateFormat.format(LauncherSettings.use24h(this) ? "HH:mm" : "h:mm", c));
         date.setText(DateFormat.format("EEEE, d MMMM yyyy", c));
         prayer.refresh();
     }
@@ -1343,6 +1473,12 @@ public class MainActivity extends Activity {
         pills[PILL_WIFI].setContentDescription(st.pillLabel());
         system.refreshNetwork();
         prayer.onNetworkAvailable();
+    }
+
+    /** Settings → Home screen → Wallpaper dim. */
+    private void applyWallpaperDim() {
+        int a = LauncherSettings.DIM_ALPHA[Math.max(0, Math.min(3, LauncherSettings.choice(this, LauncherSettings.WALL_DIM)))];
+        wallpaper.setColorFilter(Color.argb(a, 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
     }
 
     private void loadWallpaper() {
@@ -1381,7 +1517,7 @@ public class MainActivity extends Activity {
                 if (bmp == null) return;
                 wallpaper.setImageBitmap(bmp);
                 // Dim it so text and tiles stay readable.
-                wallpaper.setColorFilter(Color.argb(115, 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
+                applyWallpaperDim();
                 wallpaper.setVisibility(View.VISIBLE);
             });
         });
@@ -1489,7 +1625,7 @@ public class MainActivity extends Activity {
         live = want;
         if (want) {
             system.onResume();
-            nowPlaying.start();
+            if (LauncherSettings.flag(this, LauncherSettings.SHOW_NOW)) nowPlaying.start();
         } else {
             system.onPause();
             nowPlaying.stop();
@@ -1530,6 +1666,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         DockConfig.removeListener(dockChanged);
+        LauncherSettings.removeListener(settingsChanged);
         Alerts.get().removeListener(alertsChanged);
         unregisterReceiver(packageReceiver);
         worker.shutdownNow();

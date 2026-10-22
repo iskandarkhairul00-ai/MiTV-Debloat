@@ -5,7 +5,6 @@ import android.content.res.ColorStateList;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.text.format.DateFormat;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -54,9 +53,9 @@ final class PrayerPanel {
     private final Context ctx;
     private final Executor worker;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final String zone;
+    private String zone; // Settings → Prayer times → Zone
     private final float dp;
-    private final TextView hijriView, countdown;
+    private final TextView hijriView, countdown, title;
     private final TextView[] times = new TextView[KEYS.length];
     private final TextView[] names = new TextView[KEYS.length];
 
@@ -70,7 +69,7 @@ final class PrayerPanel {
         this.worker = worker;
         this.hijriView = hijriView;
         dp = ctx.getResources().getDisplayMetrics().density;
-        zone = ctx.getString(R.string.prayer_zone);
+        zone = LauncherSettings.zone(ctx);
 
         LinearLayout header = new LinearLayout(ctx);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -80,7 +79,8 @@ final class PrayerPanel {
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(px(12), px(12));
         mlp.setMarginEnd(px(5));
         header.addView(moon, mlp);
-        header.addView(small("PRAYER · " + zone, DIM, 10.5f));
+        title = small("PRAYER · " + zone, DIM, 10.5f);
+        header.addView(title);
         countdown = small("", NEXT, 10.5f);
         countdown.setGravity(Gravity.END);
         header.addView(countdown, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -123,6 +123,17 @@ final class PrayerPanel {
         render(today, LocalTime.now());
     }
 
+    /** Zone changed in Settings: show that zone's times (from cache, else fetched). */
+    void setZone(String z) {
+        if (z.equals(zone)) return;
+        zone = z;
+        title.setText("PRAYER · " + zone);
+        month = null;
+        monthKey = null;
+        fetching = false; // a fetch for the old zone is dropped when it lands
+        refresh();
+    }
+
     /** Network came back: retry a failed fetch (at most once a minute). */
     void onNetworkAvailable() {
         if (month == null && !fetching && System.currentTimeMillis() - lastAttempt > 60_000) {
@@ -142,7 +153,7 @@ final class PrayerPanel {
         hijriView.setText(hijri(day.optString("hijri")));
 
         LocalTime[] t = new LocalTime[KEYS.length];
-        boolean h24 = DateFormat.is24HourFormat(ctx);
+        boolean h24 = LauncherSettings.use24h(ctx);
         for (int i = 0; i < KEYS.length; i++) {
             t[i] = parse(day.optString(KEYS[i]));
             times[i].setText(t[i] == null ? "--:--" : t[i].format(java.time.format.DateTimeFormatter.ofPattern(h24 ? "HH:mm" : "h:mm")));
@@ -215,12 +226,12 @@ final class PrayerPanel {
 
     // ---------------------------------------------------------------- data
 
-    private File cacheFile(YearMonth ym) {
-        return new File(ctx.getFilesDir(), "prayer-" + zone + "-" + ym + ".json");
+    private File cacheFile(String z, YearMonth ym) {
+        return new File(ctx.getFilesDir(), "prayer-" + z + "-" + ym + ".json");
     }
 
     private JSONArray readCache(YearMonth ym) {
-        File f = cacheFile(ym);
+        File f = cacheFile(zone, ym);
         if (!f.isFile()) return null;
         try (BufferedReader r = new BufferedReader(new FileReader(f))) {
             StringBuilder sb = new StringBuilder();
@@ -235,11 +246,12 @@ final class PrayerPanel {
         if (fetching) return;
         fetching = true;
         lastAttempt = System.currentTimeMillis();
+        String z = zone;
         worker.execute(() -> {
             JSONArray result = null;
             HttpURLConnection c = null;
             try {
-                c = (HttpURLConnection) new URL(API + zone).openConnection();
+                c = (HttpURLConnection) new URL(API + z).openConnection();
                 c.setConnectTimeout(15_000);
                 c.setReadTimeout(15_000);
                 c.setRequestProperty("Accept", "application/json");
@@ -257,7 +269,7 @@ final class PrayerPanel {
                     String expect = "-" + MALAY_MONTHS[ym.getMonthValue() - 1] + "-" + ym.getYear();
                     if (first.toLowerCase(Locale.ROOT).endsWith(expect.toLowerCase(Locale.ROOT))) {
                         result = arr;
-                        writeCache(ym, arr);
+                        writeCache(z, ym, arr);
                     }
                 }
             } catch (Exception e) {
@@ -267,6 +279,7 @@ final class PrayerPanel {
             }
             JSONArray done = result;
             main.post(() -> {
+                if (!z.equals(zone)) return; // the zone changed meanwhile
                 fetching = false;
                 if (done != null) {
                     month = done;
@@ -277,10 +290,10 @@ final class PrayerPanel {
         });
     }
 
-    private void writeCache(YearMonth ym, JSONArray arr) throws IOException {
+    private void writeCache(String z, YearMonth ym, JSONArray arr) throws IOException {
         File[] old = ctx.getFilesDir().listFiles((d, n) -> n.startsWith("prayer-"));
         if (old != null) for (File f : old) f.delete();
-        try (FileOutputStream out = new FileOutputStream(cacheFile(ym))) {
+        try (FileOutputStream out = new FileOutputStream(cacheFile(z, ym))) {
             out.write(arr.toString().getBytes(StandardCharsets.UTF_8));
         }
     }

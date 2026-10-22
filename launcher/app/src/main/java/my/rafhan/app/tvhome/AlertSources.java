@@ -34,12 +34,13 @@ import java.util.regex.Pattern;
  *    build-and-install.sh), at start and every 6 h;
  *  - new HDMI-CEC devices: TvInputManager child inputs under an HDMI port;
  *  - Bluetooth devices connecting / disconnecting (the TV remote and quick reconnects ignored);
- *  - memory use above 85 % (re-arms below 80 %).
+ *  - memory use above the level set in Settings (85 % by default; re-arms 5 points lower).
+ * Each source can be switched off in Settings → Notifications.
  * Device and memory alerts also show a short banner over any app.
  */
 final class AlertSources {
     private static final long PLAY_EVERY_MS = 6 * 60 * 60_000L, MEMORY_EVERY_MS = 60_000, BT_SETTLE_MS = 2 * 60_000;
-    private static final float MEMORY_HIGH = 0.85f, MEMORY_REARM = 0.80f;
+    private static final float MEMORY_REARM_GAP = 0.05f; // re-arm 5 points under the level
     private static final Pattern REMOTE = Pattern.compile("(?i)\\b(rc|remote)\\b");
 
     private final Context ctx;
@@ -61,7 +62,17 @@ final class AlertSources {
         tim = ctx.getSystemService(TvInputManager.class);
     }
 
+    /** Play updates switched on/off in Settings: re-read (or clear) right away. */
+    private final LauncherSettings.Listener settingsListener = this::onSettingChanged;
+
+    private void onSettingChanged(String key) {
+        if (!LauncherSettings.ALERT_PLAY.equals(key)) return;
+        main.removeCallbacks(playCheck);
+        main.post(playCheck);
+    }
+
     void start() {
+        LauncherSettings.addListener(settingsListener);
         main.post(playCheck);
         main.postDelayed(memoryCheck, MEMORY_EVERY_MS);
         if (tim != null) {
@@ -74,6 +85,7 @@ final class AlertSources {
     }
 
     void stop() {
+        LauncherSettings.removeListener(settingsListener);
         main.removeCallbacksAndMessages(null);
         if (tim != null) tim.unregisterCallback(tvCallback);
         try {
@@ -90,7 +102,10 @@ final class AlertSources {
     private final Runnable playCheck = new Runnable() {
         @Override
         public void run() {
-            Thread t = new Thread(() -> alerts.sync(Alerts.PLAY, readPlayUpdates()), "alerts-play");
+            // Switched off in Settings: clear any shown update alerts and stop reading.
+            boolean on = LauncherSettings.flag(ctx, LauncherSettings.ALERT_PLAY);
+            Thread t = new Thread(() -> alerts.sync(Alerts.PLAY,
+                    on ? readPlayUpdates() : new ArrayList<>()), "alerts-play");
             t.setDaemon(true);
             t.start();
             main.postDelayed(this, PLAY_EVERY_MS);
@@ -198,8 +213,9 @@ final class AlertSources {
             announcedCec = present;
             return;
         }
+        boolean on = LauncherSettings.flag(ctx, LauncherSettings.ALERT_HDMI);
         for (String k : present) {
-            if (announcedCec.contains(k)) continue;
+            if (!on || announcedCec.contains(k)) continue;
             String[] d = details.get(k);
             Intent switchTo = new Intent(Intent.ACTION_VIEW).setDataAndType(
                     TvContract.buildChannelUriForPassthroughInput(d[2]), "vnd.android.cursor.item/channel");
@@ -251,6 +267,7 @@ final class AlertSources {
     };
 
     private void btAlert(String title, String name, long now) {
+        if (!LauncherSettings.flag(ctx, LauncherSettings.ALERT_BT)) return;
         alerts.add(new Alerts.Alert("bt:" + title + ":" + name + "@" + now, Alerts.BLUETOOTH, title, name, now,
                 new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)));
         banner.showMessage(R.drawable.ic_bluetooth, title.endsWith("connected") && !title.contains("dis")
@@ -268,7 +285,9 @@ final class AlertSources {
                 ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
                 am.getMemoryInfo(mi);
                 float used = mi.totalMem > 0 ? (mi.totalMem - mi.availMem) / (float) mi.totalMem : 0;
-                if (memoryArmed && used >= MEMORY_HIGH) {
+                float high = LauncherSettings.choice(ctx, LauncherSettings.MEMORY_LEVEL) / 100f;
+                boolean on = LauncherSettings.flag(ctx, LauncherSettings.ALERT_MEMORY);
+                if (on && memoryArmed && used >= high) {
                     memoryArmed = false;
                     int pct = Math.round(used * 100);
                     Intent clean = ctx.getPackageManager().getLeanbackLaunchIntentForPackage("com.xiaomi.mitv.tvmanager");
@@ -276,7 +295,7 @@ final class AlertSources {
                     alerts.add(new Alerts.Alert("mem@" + now, Alerts.MEMORY, "Memory is " + pct + "% full",
                             clean != null ? "Open TV Manager to free some" : "Close apps you're not using", now, clean));
                     banner.showMessage(R.drawable.ic_ram, 0xFFFFB340, "Memory is " + pct + "% full", 4000);
-                } else if (!memoryArmed && used < MEMORY_REARM) {
+                } else if (!memoryArmed && used < high - MEMORY_REARM_GAP) {
                     memoryArmed = true;
                 }
             }

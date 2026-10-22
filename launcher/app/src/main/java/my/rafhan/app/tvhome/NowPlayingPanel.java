@@ -207,6 +207,16 @@ final class NowPlayingPanel {
         if (h != null) new Thread(() -> adb.stop(h), "media-helper-stop").start();
     }
 
+    /** Settings → Now Playing card off: stop watching and take the card down. */
+    void disable() {
+        stop();
+        if (shown) {
+            shown = false;
+            card.setVisibility(View.GONE);
+            listener.onShownChanged(false);
+        }
+    }
+
     /** Hidden while the app grid has the screen: pause the tick and dumpsys polling then. */
     void setVisible(boolean v) {
         if (visibleOnScreen == v) return;

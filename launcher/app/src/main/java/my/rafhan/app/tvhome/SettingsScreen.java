@@ -1,0 +1,688 @@
+package my.rafhan.app.tvhome;
+
+import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import java.io.File;
+import java.text.DateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
+
+/**
+ * The launcher's own Settings (gear pill), laid out like Matinee's: categories on the left, the
+ * category's rows on the right (switches, choices that cycle on OK, pickers that open a list in
+ * the right pane, actions). Every option lives in LauncherSettings; the parts of the launcher
+ * that use one listen for changes. MainActivity owns the keys and the focus highlight and asks
+ * this class what's focused.
+ */
+final class SettingsScreen {
+    private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, GREEN = 0xFF34C759, AMBER = 0xFFFFB340;
+    private static final int TOGGLE = 0, CHOICE = 1, PICKER = 2, ACTION = 3, INFO = 4, CHECK = 5;
+
+    private static final int HOME = 0, PRAYER = 1, ALERTS = 2, REMOTE = 3, HIDDEN = 4; // About: 5
+    private static final String[] CATS = {"Home screen", "Prayer times", "Notifications", "Phone remote",
+            "Running apps", "About"};
+    private static final String[] CAT_SUBS = {"Cards, clock and wallpaper", "Zone and card",
+            "What the bell tells you", "Control the TV from your phone", "Apps hidden from the list",
+            "Version and TV settings"};
+    private static final int[] CAT_ICONS = {R.drawable.ic_tv, R.drawable.ic_crescent, R.drawable.ic_bell,
+            R.drawable.ic_phone, R.drawable.ic_ram, R.drawable.ic_info};
+    private static final String LIVE_TV = "com.mediatek.wwtv.tvcenter";
+
+    interface Host {
+        /** Focus or content changed: the highlight should follow. */
+        void onFocusMoved();
+
+        void openTvSettings();
+
+        /** The wallpaper file was deleted. */
+        void wallpaperRemoved();
+    }
+
+    private static final class Row {
+        final int type;
+        final String label;
+        String sub, key;
+        int[] values;
+        String[] names;
+        Supplier<String> value;
+        Runnable action;
+        boolean checked;
+
+        Row(int type, String label) {
+            this.type = type;
+            this.label = label;
+        }
+    }
+
+    private final Context ctx;
+    private final Executor worker;
+    private final Host host;
+    private final float dp;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final List<View> catViews = new ArrayList<>();
+    private final List<View> rowViews = new ArrayList<>();
+    private final LinearLayout rowList;
+    private final ScrollView scroll;
+    private final TextView crumb, paneTitle, paneSub;
+
+    private int col, cat, row;
+    private List<Row> rows = new ArrayList<>();
+    // A picker (zone list, app list) replaces the rows until Back.
+    private List<Row> picker;
+    private String pickerTitle;
+    private int pickerFrom;
+    private boolean confirmForget;
+
+    SettingsScreen(Context ctx, FrameLayout root, Executor worker, Host host) {
+        this.ctx = ctx;
+        this.worker = worker;
+        this.host = host;
+        dp = ctx.getResources().getDisplayMetrics().density;
+
+        // Title: [gear] Settings / Category
+        LinearLayout title = new LinearLayout(ctx);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView gear = icon(R.drawable.ic_settings, TEXT, 22);
+        gear.setBackgroundResource(R.drawable.sys_bg);
+        gear.setScaleType(ImageView.ScaleType.CENTER);
+        title.addView(gear, new LinearLayout.LayoutParams(px(44), px(44)));
+        TextView name = text(30, 300, TEXT);
+        name.setText("Settings");
+        LinearLayout.LayoutParams nlp = wrap();
+        nlp.setMarginStart(px(16));
+        title.addView(name, nlp);
+        crumb = text(15, 400, DIM);
+        LinearLayout.LayoutParams clp = wrap();
+        clp.setMarginStart(px(12));
+        title.addView(crumb, clp);
+        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        tlp.setMargins(px(64), px(44), 0, 0);
+        root.addView(title, tlp);
+
+        LinearLayout body = new LinearLayout(ctx);
+        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
+        blp.setMargins(px(56), px(112), px(64), px(52));
+        root.addView(body, blp);
+
+        // Left: categories.
+        LinearLayout cats = new LinearLayout(ctx);
+        cats.setOrientation(LinearLayout.VERTICAL);
+        body.addView(cats, new LinearLayout.LayoutParams(px(290), ViewGroup.LayoutParams.MATCH_PARENT));
+        for (int i = 0; i < CATS.length; i++) {
+            LinearLayout c = new LinearLayout(ctx);
+            c.setGravity(Gravity.CENTER_VERTICAL);
+            c.setPadding(px(14), 0, px(14), 0);
+            ImageView ic = icon(CAT_ICONS[i], TEXT, 18);
+            ic.setBackgroundResource(R.drawable.np_button);
+            ic.setScaleType(ImageView.ScaleType.CENTER);
+            c.addView(ic, new LinearLayout.LayoutParams(px(32), px(32)));
+            TextView t = text(16, 500, TEXT);
+            t.setText(CATS[i]);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            lp.setMarginStart(px(14));
+            c.addView(t, lp);
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(50));
+            rlp.bottomMargin = px(4);
+            cats.addView(c, rlp);
+            catViews.add(c);
+        }
+
+        // Right: the category's card.
+        LinearLayout pane = new LinearLayout(ctx);
+        pane.setOrientation(LinearLayout.VERTICAL);
+        pane.setBackgroundResource(R.drawable.sys_bg);
+        pane.setPadding(px(18), px(16), px(18), px(8));
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        plp.setMarginStart(px(28));
+        body.addView(pane, plp);
+        LinearLayout head = new LinearLayout(ctx);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(px(6), 0, px(6), 0);
+        paneTitle = text(21, 600, TEXT);
+        head.addView(paneTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        paneSub = text(13, 400, DIM);
+        head.addView(paneSub);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        hlp.bottomMargin = px(10);
+        pane.addView(head, hlp);
+        scroll = new ScrollView(ctx);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setFocusable(false);
+        scroll.setVerticalFadingEdgeEnabled(true);
+        scroll.setFadingEdgeLength(px(24));
+        rowList = new LinearLayout(ctx);
+        rowList.setOrientation(LinearLayout.VERTICAL);
+        rowList.setPadding(0, px(4), 0, px(12));
+        scroll.addView(rowList, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        pane.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        TextView hint = text(12, 400, DIM);
+        hint.setText("BACK  return     ▲ ▼  move     OK  select");
+        FrameLayout.LayoutParams hl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+        hl.setMargins(px(64), 0, 0, px(20));
+        root.addView(hint, hl);
+    }
+
+    // ---------------------------------------------------------------- focus (MainActivity)
+
+    /** Opened from the gear: categories, on the last category used. */
+    void open() {
+        col = 0;
+        row = 0;
+        picker = null;
+        confirmForget = false;
+        render();
+    }
+
+    /** What the highlight frames. */
+    View focused() {
+        if (col == 0) return catViews.get(cat);
+        return row < rowViews.size() ? rowViews.get(row) : null;
+    }
+
+    void up() {
+        move(-1);
+    }
+
+    void down() {
+        move(1);
+    }
+
+    private void move(int d) {
+        confirmForget = false;
+        if (col == 0) {
+            int c = cat + d;
+            if (c < 0 || c >= CATS.length) return;
+            cat = c;
+            row = 0;
+            render();
+        } else {
+            int r = row + d;
+            if (r < 0 || r >= current().size()) return;
+            row = r;
+            if (picker == null) {
+                render(); // rebuilt: a pending "press OK again" goes back to normal
+            } else {
+                scrollToFocus(); // long lists (zones) aren't rebuilt per key press
+                host.onFocusMoved();
+            }
+        }
+    }
+
+    void left() {
+        if (col == 1) back();
+    }
+
+    void right() {
+        if (col == 0 && !current().isEmpty()) {
+            col = 1;
+            row = 0;
+            render();
+        }
+    }
+
+    void select() {
+        if (col == 0) {
+            right();
+            return;
+        }
+        List<Row> list = current();
+        if (row >= list.size()) return;
+        act(list.get(row));
+    }
+
+    /** Back: picker → rows → categories → (true) close Settings. */
+    boolean back() {
+        confirmForget = false;
+        if (picker != null) {
+            closePicker();
+            return false;
+        }
+        if (col == 1) {
+            col = 0;
+            render();
+            return false;
+        }
+        return true;
+    }
+
+    // ---------------------------------------------------------------- actions
+
+    private void act(Row r) {
+        switch (r.type) {
+            case TOGGLE:
+                LauncherSettings.setFlag(ctx, r.key, !LauncherSettings.flag(ctx, r.key));
+                break;
+            case CHOICE: {
+                int now = LauncherSettings.choice(ctx, r.key), i = 0;
+                for (int n = 0; n < r.values.length; n++) if (r.values[n] == now) i = n;
+                LauncherSettings.setChoice(ctx, r.key, r.values[(i + 1) % r.values.length]);
+                break;
+            }
+            case PICKER:
+            case ACTION:
+            case CHECK:
+                if (r.action != null) r.action.run();
+                break;
+            default:
+                return; // INFO: nothing to do
+        }
+        if (picker == null) rows = rowsFor(cat);
+        render();
+    }
+
+    private void openPicker(String title, List<Row> items, int focus) {
+        pickerFrom = row;
+        pickerTitle = title;
+        picker = items;
+        row = Math.max(0, Math.min(focus, items.size() - 1));
+        render();
+    }
+
+    private void closePicker() {
+        picker = null;
+        row = pickerFrom;
+        rows = rowsFor(cat);
+        render();
+    }
+
+    private List<Row> current() {
+        return picker != null ? picker : rows;
+    }
+
+    // ---------------------------------------------------------------- rows per category
+
+    private List<Row> rowsFor(int c) {
+        List<Row> out = new ArrayList<>();
+        switch (c) {
+            case HOME: homeRows(out); break;
+            case PRAYER: prayerRows(out); break;
+            case ALERTS: alertRows(out); break;
+            case REMOTE: remoteRows(out); break;
+            case HIDDEN: hiddenRows(out); break;
+            default: aboutRows(out); break;
+        }
+        return out;
+    }
+
+    private void prayerRows(List<Row> out) {
+        String zone = LauncherSettings.zone(ctx);
+        String[] z = zoneEntry(zone);
+        Row r = new Row(PICKER, "Zone");
+        r.sub = z != null ? z[0] + " · " + z[2] : "JAKIM e-solat zone";
+        r.value = () -> zone;
+        r.action = this::openZonePicker;
+        out.add(r);
+        out.add(toggle(LauncherSettings.SHOW_PRAYER, "Prayer card", "Today's five prayer times on the home screen"));
+    }
+
+    private void homeRows(List<Row> out) {
+        out.add(choice(LauncherSettings.CLOCK, "Clock", "Auto follows the TV's own setting",
+                new int[] {LauncherSettings.CLOCK_AUTO, LauncherSettings.CLOCK_12, LauncherSettings.CLOCK_24},
+                new String[] {"Auto", "12-hour", "24-hour"}));
+        out.add(toggle(LauncherSettings.SHOW_USAGE, "Most used card", "Your top apps over the last 7 days"));
+        Row ex = new Row(PICKER, "Most used: leave out");
+        ex.sub = "Apps that don't count, like Live TV (it's only the HDMI and antenna screen)";
+        int n = LauncherSettings.usageExcluded(ctx).size();
+        ex.value = () -> n == 1 ? "1 app" : n + " apps";
+        ex.action = this::openUsagePicker;
+        out.add(ex);
+        out.add(toggle(LauncherSettings.SHOW_SYSTEM, "System card", "CPU, RAM, storage, network and USB debugging"));
+        out.add(toggle(LauncherSettings.SHOW_NOW, "Now Playing card", "Cover, title and controls while something plays"));
+        out.add(choice(LauncherSettings.WALL_DIM, "Wallpaper dim", "How dark the wallpaper is behind the cards",
+                new int[] {0, 1, 2, 3}, new String[] {"Off", "Low", "Medium", "High"}));
+        File wall = wallpaperFile();
+        Row w = new Row(wall != null ? ACTION : INFO, wall != null ? "Remove wallpaper" : "Wallpaper");
+        w.sub = wall != null ? "Back to the plain dark background"
+                : "Put a picture at Android/data/" + ctx.getPackageName() + "/files/wallpaper.jpg";
+        w.value = () -> wall != null ? wall.getName() : "None";
+        w.action = () -> {
+            File f;
+            while ((f = wallpaperFile()) != null && f.delete()) { /* jpg, png and webp */ }
+            host.wallpaperRemoved();
+        };
+        out.add(w);
+    }
+
+    private void alertRows(List<Row> out) {
+        out.add(toggle(LauncherSettings.ALERT_PLAY, "Play Store updates", "Checked every 6 hours"));
+        out.add(toggle(LauncherSettings.ALERT_HDMI, "New HDMI devices", "A device that appears over HDMI-CEC"));
+        out.add(toggle(LauncherSettings.ALERT_BT, "Bluetooth devices", "Connecting or disconnecting (not the TV remote)"));
+        out.add(toggle(LauncherSettings.ALERT_MEMORY, "Low memory", "When RAM use passes the level below"));
+        out.add(choice(LauncherSettings.MEMORY_LEVEL, "Low-memory level", "Alerts again after dropping 5 points under it",
+                new int[] {80, 85, 90}, new String[] {"80 %", "85 %", "90 %"}));
+        out.add(toggle(LauncherSettings.NET_BANNER, "Connection banner",
+                "Wi-Fi connected, disconnected or no internet, over any app"));
+    }
+
+    private void remoteRows(List<Row> out) {
+        out.add(toggle(LauncherSettings.REMOTE, "Phone remote",
+                "Open the address below in your phone's browser and pair with the PIN shown on the TV"));
+        Row addr = new Row(INFO, "Address");
+        String url = RemoteServer.lanUrl(ctx);
+        addr.value = () -> url.replace("http://", "");
+        out.add(addr);
+        int paired = ctx.getSharedPreferences("remote", Context.MODE_PRIVATE)
+                .getStringSet("tokens", new HashSet<>()).size();
+        Row f = new Row(paired > 0 ? ACTION : INFO, confirmForget ? "Press OK again to forget them" : "Forget all paired phones");
+        f.sub = paired == 0 ? "No phones paired" : paired == 1 ? "1 phone paired" : paired + " phones paired";
+        f.value = () -> confirmForget ? "Confirm" : "";
+        f.action = () -> {
+            if (!confirmForget) {
+                confirmForget = true;
+                return;
+            }
+            confirmForget = false;
+            RemoteServer.forgetAll(ctx);
+        };
+        out.add(f);
+    }
+
+    private void hiddenRows(List<Row> out) {
+        PackageManager pm = ctx.getPackageManager();
+        List<String> pkgs = new ArrayList<>(RunningApps.hidden(ctx));
+        pkgs.sort(String::compareTo);
+        for (String pkg : pkgs) {
+            Row r = new Row(ACTION, label(pm, pkg));
+            r.sub = "Hidden from the running-apps list";
+            r.value = () -> "Show again";
+            r.action = () -> RunningApps.setHidden(ctx, pkg, false);
+            out.add(r);
+        }
+        if (out.isEmpty()) {
+            Row r = new Row(INFO, "No hidden apps");
+            r.sub = "Hold OK on an app in the running-apps screen (Up from the top bar) to hide it";
+            out.add(r);
+        }
+    }
+
+    private void aboutRows(List<Row> out) {
+        String version = "?", installed = "?";
+        try {
+            PackageInfo pi = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
+            version = pi.versionName + " (" + pi.getLongVersionCode() + ")";
+            installed = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(new Date(pi.lastUpdateTime));
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+        out.add(info("Version", version));
+        out.add(info("Installed", installed));
+        out.add(info("APK size", (new File(ctx.getPackageCodePath()).length() / 1024) + " KB"));
+        Row tv = new Row(ACTION, "TV settings");
+        tv.sub = "Android Settings: network, display, sound, apps";
+        tv.action = host::openTvSettings;
+        out.add(tv);
+    }
+
+    // ---------------------------------------------------------------- pickers
+
+    private void openZonePicker() {
+        String zone = LauncherSettings.zone(ctx);
+        List<Row> items = new ArrayList<>();
+        int focus = 0;
+        for (String e : ctx.getResources().getStringArray(R.array.prayer_zones)) {
+            String[] z = e.split("\\|", 3); // state | code | areas
+            Row r = new Row(CHECK, z[2]);
+            r.sub = z[0] + " · " + z[1];
+            r.checked = z[1].equals(zone);
+            if (r.checked) focus = items.size();
+            r.action = () -> {
+                LauncherSettings.setZone(ctx, z[1]);
+                closePicker();
+            };
+            items.add(r);
+        }
+        openPicker("Zone", items, focus);
+    }
+
+    private void openUsagePicker() {
+        Set<String> excluded = LauncherSettings.usageExcluded(ctx);
+        int from = row;
+        worker.execute(() -> {
+            List<AppEntry> apps = AppRepository.load(ctx);
+            main.post(() -> {
+                if (col != 1 || cat != HOME || picker != null || row != from) return; // moved on meanwhile
+                List<Row> items = new ArrayList<>();
+                List<String> seen = new ArrayList<>();
+                for (AppEntry a : apps) {
+                    if (seen.contains(a.pkg)) continue;
+                    seen.add(a.pkg);
+                    Row r = new Row(CHECK, a.label);
+                    r.sub = a.pkg.equals(LIVE_TV) ? "Live TV: HDMI, AV and antenna" : null;
+                    r.checked = excluded.contains(a.pkg);
+                    r.action = () -> {
+                        r.checked = !r.checked;
+                        LauncherSettings.setUsageExcluded(ctx, a.pkg, r.checked);
+                    };
+                    items.add(r);
+                }
+                // Apps already left out first (Live TV), then A–Z.
+                items.sort((x, y) -> x.checked != y.checked ? (x.checked ? -1 : 1) : x.label.compareToIgnoreCase(y.label));
+                openPicker("Most used: leave out", items, 0);
+            });
+        });
+    }
+
+    // ---------------------------------------------------------------- views
+
+    private void render() {
+        if (picker == null) rows = rowsFor(cat);
+        for (int i = 0; i < catViews.size(); i++) {
+            // The open category stays marked while its rows have focus.
+            catViews.get(i).setBackgroundResource(i == cat && col == 1 ? R.drawable.row_selected : 0);
+        }
+        crumb.setText("/  " + CATS[cat] + (picker != null ? "  /  " + pickerTitle : ""));
+        paneTitle.setText(picker != null ? pickerTitle : CATS[cat]);
+        paneSub.setText(picker != null ? (picker.size() + " items") : CAT_SUBS[cat]);
+        renderRows();
+    }
+
+    private void renderRows() {
+        rowList.removeAllViews();
+        rowViews.clear();
+        List<Row> list = current();
+        for (int i = 0; i < list.size(); i++) {
+            View v = rowView(list.get(i));
+            rowList.addView(v, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            rowViews.add(v);
+        }
+        if (col == 0) scroll.scrollTo(0, 0);
+        else scrollToFocus();
+        host.onFocusMoved();
+    }
+
+    private void scrollToFocus() {
+        View f = row < rowViews.size() ? rowViews.get(row) : null;
+        if (f != null) scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, f.getTop() - px(70))));
+    }
+
+    private View rowView(Row r) {
+        LinearLayout v = new LinearLayout(ctx);
+        v.setGravity(Gravity.CENTER_VERTICAL);
+        v.setMinimumHeight(px(58));
+        v.setPadding(px(16), px(9), px(14), px(9));
+
+        LinearLayout texts = new LinearLayout(ctx);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        TextView label = text(16, 500, TEXT);
+        label.setText(r.label);
+        texts.addView(label);
+        if (!TextUtils.isEmpty(r.sub)) {
+            TextView sub = text(12, 400, DIM);
+            sub.setSingleLine(false);
+            sub.setMaxLines(2);
+            sub.setText(r.sub);
+            LinearLayout.LayoutParams slp = wrap();
+            slp.topMargin = px(3);
+            texts.addView(sub, slp);
+        }
+        v.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        String value = r.value != null ? r.value.get() : null;
+        switch (r.type) {
+            case TOGGLE:
+                v.addView(switchView(LauncherSettings.flag(ctx, r.key)), margin(new LinearLayout.LayoutParams(px(44), px(26))));
+                break;
+            case CHOICE:
+            case PICKER: {
+                TextView pill = text(14, 500, TEXT);
+                pill.setText(r.type == CHOICE ? r.names[indexOf(r.values, LauncherSettings.choice(ctx, r.key))] : value);
+                pill.setBackgroundResource(R.drawable.pill_bg);
+                pill.setPadding(px(12), px(5), px(12), px(5));
+                v.addView(pill, margin(wrap()));
+                v.addView(icon(R.drawable.ic_chevron, DIM, 18), new LinearLayout.LayoutParams(px(20), px(20)));
+                break;
+            }
+            case ACTION:
+                if (!TextUtils.isEmpty(value)) {
+                    TextView t = text(14, 500, confirmForget ? AMBER : DIM);
+                    t.setText(value);
+                    v.addView(t, margin(wrap()));
+                }
+                v.addView(icon(R.drawable.ic_chevron, DIM, 18), new LinearLayout.LayoutParams(px(20), px(20)));
+                break;
+            case INFO:
+                if (!TextUtils.isEmpty(value)) {
+                    TextView t = text(14, 500, DIM);
+                    t.setText(value);
+                    v.addView(t, margin(wrap()));
+                }
+                break;
+            case CHECK: {
+                ImageView check = icon(R.drawable.ic_check, GREEN, 20);
+                check.setVisibility(r.checked ? View.VISIBLE : View.INVISIBLE);
+                v.addView(check, margin(new LinearLayout.LayoutParams(px(22), px(22))));
+                break;
+            }
+        }
+        return v;
+    }
+
+    private View switchView(boolean on) {
+        FrameLayout track = new FrameLayout(ctx);
+        track.setBackgroundResource(on ? R.drawable.switch_track_on : R.drawable.switch_track);
+        View knob = new View(ctx);
+        knob.setBackgroundResource(R.drawable.switch_knob);
+        FrameLayout.LayoutParams k = new FrameLayout.LayoutParams(px(20), px(20),
+                Gravity.CENTER_VERTICAL | (on ? Gravity.END : Gravity.START));
+        k.setMargins(px(3), 0, px(3), 0);
+        track.addView(knob, k);
+        return track;
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private Row toggle(String key, String label, String sub) {
+        Row r = new Row(TOGGLE, label);
+        r.key = key;
+        r.sub = sub;
+        return r;
+    }
+
+    private Row choice(String key, String label, String sub, int[] values, String[] names) {
+        Row r = new Row(CHOICE, label);
+        r.key = key;
+        r.sub = sub;
+        r.values = values;
+        r.names = names;
+        return r;
+    }
+
+    private Row info(String label, String value) {
+        Row r = new Row(INFO, label);
+        r.value = () -> value;
+        return r;
+    }
+
+    private static int indexOf(int[] values, int v) {
+        for (int i = 0; i < values.length; i++) if (values[i] == v) return i;
+        return 0;
+    }
+
+    /** {state, code, areas} for a zone code, or null. */
+    private String[] zoneEntry(String code) {
+        for (String e : ctx.getResources().getStringArray(R.array.prayer_zones)) {
+            String[] z = e.split("\\|", 3);
+            if (z[1].equals(code)) return z;
+        }
+        return null;
+    }
+
+    private File wallpaperFile() {
+        File dir = ctx.getExternalFilesDir(null);
+        if (dir == null) return null;
+        for (String n : new String[] {"wallpaper.jpg", "wallpaper.png", "wallpaper.webp"}) {
+            File f = new File(dir, n);
+            if (f.isFile()) return f;
+        }
+        return null;
+    }
+
+    private static String label(PackageManager pm, String pkg) {
+        try {
+            return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
+    }
+
+    private LinearLayout.LayoutParams margin(LinearLayout.LayoutParams lp) {
+        lp.setMarginStart(px(12));
+        return lp;
+    }
+
+    private ImageView icon(int res, int color, int sizeDp) {
+        ImageView i = new ImageView(ctx);
+        i.setImageResource(res);
+        i.setImageTintList(ColorStateList.valueOf(color));
+        i.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        i.setMaxWidth(px(sizeDp));
+        i.setMaxHeight(px(sizeDp));
+        i.setAdjustViewBounds(true);
+        return i;
+    }
+
+    private int px(float dps) {
+        return Math.round(dps * dp);
+    }
+
+    private LinearLayout.LayoutParams wrap() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private TextView text(float sp, int weight, int color) {
+        TextView t = new TextView(ctx);
+        t.setTextSize(sp);
+        t.setTextColor(color);
+        t.setTypeface(Fonts.outfit(ctx, weight));
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setIncludeFontPadding(false);
+        return t;
+    }
+}
