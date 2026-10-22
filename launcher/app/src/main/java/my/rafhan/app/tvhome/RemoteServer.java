@@ -81,6 +81,7 @@ final class RemoteServer {
 
     // App list cache (banner lookups), guarded by this.
     private List<AppEntry> appCache;
+    private int appCacheDock;
     private long appCacheAt;
 
     RemoteServer(Context ctx) {
@@ -263,6 +264,9 @@ final class RemoteServer {
             case "/api/input":
                 if (post(method, out)) json(out, input(query.get("i")));
                 return;
+            case "/api/dock":
+                if (post(method, out)) json(out, saveDock(body));
+                return;
             case "/api/key":
                 if (post(method, out)) json(out, key(query.get("k"), query.get("n")));
                 return;
@@ -371,8 +375,9 @@ final class RemoteServer {
             List<AppEntry> ordered = new ArrayList<>();
             for (String pkg : DockConfig.load(ctx)) {
                 AppEntry e = byPkg.get(pkg);
-                if (e != null && !ordered.contains(e) && ordered.size() < 5) ordered.add(e);
+                if (e != null && !ordered.contains(e) && ordered.size() < DockConfig.MAX) ordered.add(e);
             }
+            appCacheDock = ordered.size();
             List<AppEntry> rest = new ArrayList<>(all);
             rest.removeAll(ordered);
             UsageScores.sort(rest, UsageScores.week(ctx));
@@ -389,10 +394,36 @@ final class RemoteServer {
         return null;
     }
 
+    /** {"pkgs":[...]}: the new dock, left to right (installed launchable apps only, at most 5). */
+    private Object[] saveDock(byte[] body) {
+        try {
+            JSONArray arr = new JSONObject(new String(body, StandardCharsets.UTF_8)).getJSONArray("pkgs");
+            if (arr.length() > DockConfig.MAX) return new Object[] {400, err("The dock holds up to " + DockConfig.MAX + " apps.")};
+            List<String> known = new ArrayList<>();
+            for (AppEntry e : AppRepository.load(ctx)) known.add(e.pkg);
+            List<String> pkgs = new ArrayList<>();
+            for (int i = 0; i < arr.length(); i++) {
+                String p = arr.getString(i);
+                if (!known.contains(p)) return new Object[] {400, err("Unknown app: " + p)};
+                if (!pkgs.contains(p)) pkgs.add(p);
+            }
+            if (!DockConfig.save(ctx, pkgs)) return new Object[] {500, err("Couldn't save the dock.")};
+            synchronized (this) {
+                appCache = null;
+            }
+            return new Object[] {200, ok()};
+        } catch (JSONException e) {
+            return new Object[] {400, err("Bad request.")};
+        }
+    }
+
     private JSONObject appsJson() {
         JSONArray arr = new JSONArray();
         List<AppEntry> list = apps(true);
-        int dock = Math.min(5, DockConfig.load(ctx).size());
+        int dock;
+        synchronized (this) {
+            dock = appCacheDock;
+        }
         for (int i = 0; i < list.size(); i++) {
             AppEntry e = list.get(i);
             arr.put(new JSONObjectBuilder().put("pkg", e.pkg).put("label", e.label).put("dock", i < dock).build());

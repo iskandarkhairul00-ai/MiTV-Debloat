@@ -114,7 +114,7 @@ adb shell settings put global private_dns_mode opportunistic
 
 ## The launcher
 
-- **Dock:** Netflix · RadioStream · YouTube · MovieBox · RTMKlik. The focused app's name appears large above the dock, with a glow in a colour taken from its banner.
+- **Dock:** Netflix · YouTube · TV Manager · Gallery · Play Store by default (change it from the TV or phone, see "Change the dock"). The focused app's name appears large above the dock, with a glow in a colour taken from its banner.
 - **Top bar:**
   - **Inputs** opens a dropdown with HDMI 1–3, AV and Live TV. It switches through the TV input framework.
   - **Wi-Fi** shows the network name and opens Wi-Fi settings.
@@ -266,30 +266,27 @@ Open **http://192.168.0.44:8486** on your phone, on the same Wi-Fi. Use **Add to
 
 **Undo:** `scripts/restore.sh` removes the accessibility service and keeps Button Mapper's.
 
-### Change the dock order
+### Change the dock
 
-**No rebuild:** push a `dock.txt` with one package name per line, left to right (5 max):
-```bash
-cat > dock.txt <<'EOF'
-com.google.android.youtube.tv
-com.netflix.ninja
-my.rafhan.app.radiostream
-com.community.mbox.tv
-my.gov.rtm.tv
-EOF
-adb push dock.txt /sdcard/Android/data/my.rafhan.app.tvhome/files/dock.txt
-adb shell am force-stop my.rafhan.app.tvhome && adb shell input keyevent KEYCODE_HOME
-```
-Delete that file to go back to the built-in order.
+The dock holds **up to 5 apps**, in any order.
 
-To find a package name, run `adb shell pm list packages | grep -i <name>`. Apps you know:
-- tonton: `my.com.tonton.screen`
-- M3U IPTV: `de.herber_edevelopment.m3uiptv`
-- Live TV: `com.mediatek.wwtv.tvcenter`
-- YouTube Music: `com.google.android.youtube.tvmusic`
+**On the TV**, hold **OK** (or press **Menu**) on an app:
+- **On a dock app:**
+  - **Move:** the app wiggles. Use ◀ ▶ to slide it, then **OK** (or Back) to place it.
+  - **Remove from dock.**
+  - **Open.**
+- **On an app in the app list:**
+  - **Add to dock**, or **Replace a dock app…** when the dock is full. That jumps to the dock, which asks "Replace which app with …?"; pick one with OK, or press Back to cancel.
+  - **Open.**
 
-**Permanent:** edit `launcher/app/src/main/res/values/dock.xml`, then run `scripts/build-and-install.sh`.
-The dock size and grid columns are `DOCK_SIZE` and `COLS` at the top of `MainActivity.java` (tile sizes `TILE_W`/`TILE_H`/`COL_W` next to them must fit `COLS × COL_W` within 960 dp).
+**From the phone remote**, on the Apps tab tap **Edit** next to DOCK:
+- ◀ ▶ reorders an app and ✕ removes it.
+- **+** on any app below adds it.
+- **Done** saves it to the TV, which updates at once.
+
+**Missing apps:** if a dock app isn't installed, or is disabled, it's skipped and the dock shows the others. It comes back by itself once the app is installed or enabled again. The next time you edit the dock it's dropped, so it doesn't hold a hidden slot.
+
+**Where it's stored:** the order is saved in `/sdcard/Android/data/my.rafhan.app.tvhome/files/dock.txt`, one package per line, left to right. You can still push that file over ADB. Delete it to go back to the built-in default (`res/values/dock.xml`).
 
 ### Change the wallpaper
 

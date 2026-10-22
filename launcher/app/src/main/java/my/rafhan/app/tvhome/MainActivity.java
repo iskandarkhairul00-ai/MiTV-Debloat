@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
     private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4;
     private static final float NOW_SCALE = 1.12f;
     private static final int RIGHT_CARD_W = 412; // System and Now Playing cards, dp
-    private static final int COLS = 5, DOCK_SIZE = 5;
+    private static final int COLS = 5, DOCK_SIZE = DockConfig.MAX;
     private static final float TILE_SCALE = 1.1f, PILL_SCALE = 1.06f;
     // dp
     private static final int TILE_W = 152, TILE_H = 86, COL_W = 172, ROW_PITCH = 132;
@@ -112,7 +112,28 @@ public class MainActivity extends Activity {
     private RecyclerView grid;
     private final GridAdapter adapter = new GridAdapter();
     private LinearLayout menu;
-    private List<TvInputs.Item> inputs = new ArrayList<>();
+    // The glass dropdown: Inputs (from the pill) or an app's options (hold OK / Menu on a tile).
+    private static final class MenuItem {
+        final String label;
+        final Runnable action;
+
+        MenuItem(String label, Runnable action) {
+            this.label = label;
+            this.action = action;
+        }
+    }
+
+    private final List<MenuItem> menuItems = new ArrayList<>();
+    private int menuReturnSection = TOP, menuReturnIdx;
+
+    // Dock editing: MOVE wiggles the focused dock app and Left/Right shift it; REPLACE picks which
+    // dock app the chosen app replaces (dock full).
+    private static final int EDIT_NONE = 0, EDIT_MOVE = 1, EDIT_REPLACE = 2;
+    private int editMode = EDIT_NONE;
+    private AppEntry replaceWith;
+    private String pendingDockFocus; // after a dock change, focus this app in the dock
+    private ValueAnimator wiggle;
+    private final DockConfig.Listener dockChanged = this::loadApps;
 
     private List<AppEntry> dock = new ArrayList<>();
     private List<AppEntry> apps = new ArrayList<>();
@@ -237,6 +258,7 @@ public class MainActivity extends Activity {
         pf.addDataScheme("package");
         ContextCompat.registerReceiver(this, packageReceiver, pf, ContextCompat.RECEIVER_EXPORTED);
 
+        DockConfig.addListener(dockChanged);
         loadApps(); // restores focus when the list arrives
         startForegroundService(new Intent(this, RemoteService.class));
     }
@@ -385,6 +407,7 @@ public class MainActivity extends Activity {
         dock = newDock;
         apps = newApps;
 
+        stopWiggle();
         dockRow.removeAllViews();
         dockTiles.clear();
         for (AppEntry e : dock) {
@@ -392,6 +415,7 @@ public class MainActivity extends Activity {
             tile.setImageBitmap(e.tile);
             dockTiles.add(tile);
         }
+        findViewById(R.id.dockBand).setVisibility(dock.isEmpty() ? View.INVISIBLE : View.VISIBLE);
         adapter.notifyDataSetChanged();
 
         // Keep focus on the same app across reloads (installs, updates).
@@ -410,6 +434,11 @@ public class MainActivity extends Activity {
             restoreFocus(); // needs the app list; first load only
         } else {
             refreshFocusLook();
+        }
+        if (pendingDockFocus != null) {
+            int d = indexOf(dock, pendingDockFocus);
+            pendingDockFocus = null;
+            if (d >= 0) moveFocus(DOCK, d);
         }
 
         // Dock first so the home row fills in before the grid below it.
@@ -543,18 +572,19 @@ public class MainActivity extends Activity {
             default: menuIdx = newIndex; break;
         }
         applyLook(section, newIndex, true, true);
-        if ((oldSection == GRID) != (newSection == GRID)) {
-            page.animate().translationY(newSection == GRID ? -gridShift() : 0)
+        if (onGridPage(oldSection) != onGridPage(newSection)) {
+            boolean toGrid = onGridPage(newSection);
+            page.animate().translationY(toGrid ? -gridShift() : 0)
                     .setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
-            setHomeVisible(newSection != GRID, true);
+            setHomeVisible(!toGrid, true);
             // Back on the home screen the peek shows the first row again.
             int scrolled = gridScroll();
-            if (newSection != GRID && scrolled != 0) {
+            if (!toGrid && scrolled != 0) {
                 gridScrollTarget = 0;
                 grid.smoothScrollBy(0, -scrolled, new DecelerateInterpolator(2f));
             }
-            system.setVisible(newSection != GRID);
-            nowPlaying.setVisible(newSection != GRID);
+            system.setVisible(!toGrid);
+            nowPlaying.setVisible(!toGrid);
         }
         if (newSection == GRID) scrollGridToRow(newIndex / COLS, true);
         updateHero(true);
@@ -563,15 +593,20 @@ public class MainActivity extends Activity {
         main.postDelayed(saveFocus, 1000);
     }
 
+    /** The app grid page is showing (the grid itself, or a menu opened on a grid tile). */
+    private boolean onGridPage(int sec) {
+        return sec == GRID || (sec == MENU && menuReturnSection == GRID);
+    }
+
     /** Re-applies every focus visual without animation (after reloads / restore). */
     private void refreshFocusLook() {
         for (int i = 0; i < pills.length; i++) applyLook(TOP, i, section == TOP && i == topIdx, false);
         for (int i = 0; i < dockTiles.size(); i++) applyLook(DOCK, i, section == DOCK && i == dockIdx, false);
         for (int i = 0; i < NowPlayingPanel.BUTTONS; i++) applyLook(NOW, i, section == NOW && i == nowIdx, false);
         adapter.notifyDataSetChanged();
-        setHomeVisible(section != GRID, false);
-        system.setVisible(section != GRID);
-        nowPlaying.setVisible(section != GRID);
+        setHomeVisible(!onGridPage(section), false);
+        system.setVisible(!onGridPage(section));
+        nowPlaying.setVisible(!onGridPage(section));
         updateHero(false);
         page.invalidate();
     }
@@ -707,7 +742,9 @@ public class MainActivity extends Activity {
         boolean show = section == DOCK && !dock.isEmpty();
         if (dockIdx < dock.size()) {
             AppEntry e = dock.get(dockIdx);
-            hero.setText(e.label);
+            if (editMode == EDIT_MOVE) hero.setText("Move " + e.label + "  ◀ ▶   ·   OK to place");
+            else if (editMode == EDIT_REPLACE && replaceWith != null) hero.setText("Replace which app with " + replaceWith.label + "?");
+            else hero.setText(e.label);
             setGlow(e.glow, animate);
         }
         float a = show ? 1f : 0f;
@@ -757,9 +794,21 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_RIGHT:
                 if (down) onSide(1);
                 return true;
+            case KeyEvent.KEYCODE_MENU:
+                if ((section != DOCK && section != GRID) || editMode != EDIT_NONE) return super.dispatchKeyEvent(e);
+                if (down && e.getRepeatCount() == 0) openAppMenu();
+                return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                // Hold OK on an app: its options (the release mustn't also open the app).
+                if (down && e.getRepeatCount() == 1 && armedKey == code && editMode == EDIT_NONE
+                        && (section == DOCK || section == GRID)) {
+                    armedKey = KeyEvent.KEYCODE_UNKNOWN;
+                    openAppMenu();
+                    return true;
+                }
+                // fall through
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_ESCAPE:
                 // Act on release, and only for presses that started here, so the OK/Back
@@ -778,6 +827,7 @@ public class MainActivity extends Activity {
     }
 
     private void onUp() {
+        if (editMode != EDIT_NONE) return; // finish (OK) or cancel (Back) first
         switch (section) {
             case DOCK:
                 if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
@@ -801,6 +851,7 @@ public class MainActivity extends Activity {
     }
 
     private void onDown() {
+        if (editMode != EDIT_NONE) return;
         int n = apps.size();
         switch (section) {
             case TOP:
@@ -826,6 +877,10 @@ public class MainActivity extends Activity {
     }
 
     private void onSide(int dir) {
+        if (editMode == EDIT_MOVE) {
+            shiftDockApp(dir);
+            return;
+        }
         switch (section) {
             case TOP: {
                 int i = topIdx + dir;
@@ -853,6 +908,14 @@ public class MainActivity extends Activity {
     }
 
     private void onSelect() {
+        if (editMode == EDIT_MOVE) {
+            finishMove();
+            return;
+        }
+        if (editMode == EDIT_REPLACE) {
+            finishReplace();
+            return;
+        }
         switch (section) {
             case TOP:
                 if (topIdx == 0) openMenu();
@@ -868,16 +931,26 @@ public class MainActivity extends Activity {
                 nowPlaying.press(nowIdx);
                 break;
             case MENU:
-                if (menuIdx < inputs.size()) {
-                    Intent intent = inputs.get(menuIdx).intent;
+                if (menuIdx < menuItems.size()) {
+                    Runnable action = menuItems.get(menuIdx).action;
                     closeMenu();
-                    startSafely(intent);
+                    action.run();
                 }
                 break;
         }
     }
 
     private void onBack() {
+        if (editMode == EDIT_MOVE) {
+            finishMove();
+            return;
+        }
+        if (editMode == EDIT_REPLACE) {
+            editMode = EDIT_NONE;
+            replaceWith = null;
+            moveFocus(GRID, gridIdx); // back to the app that was going to be added
+            return;
+        }
         if (section == MENU) closeMenu();
         else if (section == GRID || section == TOP || section == NOW) {
             if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
@@ -894,25 +967,81 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- inputs
 
+    /** The Inputs pill: HDMI / AV / Live TV. */
     private void openMenu() {
-        inputs = TvInputs.load(this);
+        List<MenuItem> items = new ArrayList<>();
+        for (TvInputs.Item in : TvInputs.load(this)) items.add(new MenuItem(in.label, () -> startSafely(in.intent)));
+        if (items.isEmpty()) return;
+        View pill = pills[0];
+        pill.getLocationInWindow(loc);
+        showMenu(items, Math.min(loc[0], screenW - px(240 + 24)), loc[1] + Math.round(pill.getHeight() * PILL_SCALE) + px(10));
+    }
+
+    /** Hold OK / Menu on a dock or grid tile: dock editing and Open. */
+    private void openAppMenu() {
+        boolean inDock = section == DOCK;
+        AppEntry e = inDock ? (dockIdx < dock.size() ? dock.get(dockIdx) : null)
+                : (gridIdx < apps.size() ? apps.get(gridIdx) : null);
+        if (e == null) return;
+        List<MenuItem> items = new ArrayList<>();
+        if (inDock) {
+            if (dock.size() > 1) items.add(new MenuItem("Move", this::startMove));
+            items.add(new MenuItem("Remove from dock", () -> {
+                List<String> d = dockPkgs();
+                d.remove(e.pkg);
+                DockConfig.save(this, d);
+            }));
+        } else if (dock.size() < DOCK_SIZE) {
+            items.add(new MenuItem("Add to dock", () -> {
+                pendingDockFocus = e.pkg;
+                List<String> d = dockPkgs();
+                d.add(e.pkg);
+                DockConfig.save(this, d);
+            }));
+        } else {
+            items.add(new MenuItem("Replace a dock app…", () -> startReplace(e)));
+        }
+        items.add(new MenuItem("Open " + e.label, () -> launch(e)));
+
+        View tile = inDock ? dockTiles.get(dockIdx) : focusedGridTile();
+        int x = screenW / 2 - px(120), y = screenH / 2;
+        int menuH = px(46) * items.size() + px(16);
+        if (tile != null) {
+            tile.getLocationInWindow(loc);
+            int w = Math.round(tile.getWidth() * tile.getScaleX()), h = Math.round(tile.getHeight() * tile.getScaleY());
+            x = Math.max(px(24), Math.min(screenW - px(264), loc[0] + w / 2 - px(120)));
+            // Above the tile when there's room (always for the dock), else below it.
+            y = loc[1] - menuH - px(14) >= px(24) ? loc[1] - menuH - px(14) : loc[1] + h + px(14);
+        }
+        showMenu(items, x, y);
+    }
+
+    private View focusedGridTile() {
+        RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(gridIdx);
+        return vh instanceof Holder ? ((Holder) vh).tile : null;
+    }
+
+    private void showMenu(List<MenuItem> items, int x, int y) {
+        menuItems.clear();
+        menuItems.addAll(items);
+        menuReturnSection = section;
+        menuReturnIdx = indexIn(section);
         menu.removeAllViews();
-        for (TvInputs.Item item : inputs) {
+        for (MenuItem item : items) {
             TextView row = new TextView(this);
             row.setText(item.label);
             row.setTextSize(16);
             row.setTypeface(Fonts.outfit(this, 400));
             row.setTextColor(0xB3FFFFFF);
             row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setSingleLine(true);
+            row.setEllipsize(android.text.TextUtils.TruncateAt.END);
             row.setPadding(px(16), 0, px(16), 0);
             menu.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(46)));
         }
-        if (inputs.isEmpty()) return;
-        View pill = pills[0];
-        pill.getLocationInWindow(loc);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) menu.getLayoutParams();
-        lp.leftMargin = Math.min(loc[0], screenW - px(240 + 24));
-        lp.topMargin = loc[1] + Math.round(pill.getHeight() * PILL_SCALE) + px(10);
+        lp.leftMargin = x;
+        lp.topMargin = y;
         menu.setLayoutParams(lp);
         menu.setVisibility(View.VISIBLE);
         menu.setAlpha(0f);
@@ -924,7 +1053,99 @@ public class MainActivity extends Activity {
     private void closeMenu() {
         menu.animate().alpha(0f).translationY(-px(8)).setDuration(120)
                 .withEndAction(() -> menu.setVisibility(View.GONE)).start();
-        moveFocus(TOP, 0);
+        int sec = menuReturnSection, idx = menuReturnIdx;
+        menuReturnSection = TOP;
+        if (sec == GRID) {
+            // Stay on the grid page: switch section without the page slide.
+            section = MENU;
+            menuReturnSection = GRID;
+        }
+        moveFocus(sec, idx);
+        menuReturnSection = TOP;
+    }
+
+    // ---------------------------------------------------------------- dock editing
+
+    /**
+     * The dock as shown. Edits save this, so entries for apps that aren't installed or are
+     * disabled (skipped on screen) are dropped instead of silently taking a slot.
+     */
+    private List<String> dockPkgs() {
+        List<String> d = new ArrayList<>();
+        for (AppEntry a : dock) d.add(a.pkg);
+        return d;
+    }
+
+    private void startMove() {
+        if (dockIdx >= dock.size()) return;
+        editMode = EDIT_MOVE;
+        startWiggle(dockTiles.get(dockIdx));
+        updateHero(true);
+    }
+
+    /** Swaps the moving app with its neighbour (images swap, focus follows). */
+    private void shiftDockApp(int dir) {
+        int to = dockIdx + dir;
+        if (to < 0 || to >= dock.size()) return;
+        AppEntry a = dock.get(dockIdx), b = dock.get(to);
+        dock.set(dockIdx, b);
+        dock.set(to, a);
+        dockTiles.get(dockIdx).setImageBitmap(b.tile);
+        dockTiles.get(to).setImageBitmap(a.tile);
+        stopWiggle();
+        moveFocus(DOCK, to);
+        startWiggle(dockTiles.get(to));
+    }
+
+    private void finishMove() {
+        editMode = EDIT_NONE;
+        stopWiggle();
+        List<String> order = dockPkgs();
+        if (dockIdx < dock.size()) pendingDockFocus = dock.get(dockIdx).pkg;
+        DockConfig.save(this, order); // reloads through dockChanged
+        updateHero(true);
+    }
+
+    private void startReplace(AppEntry e) {
+        editMode = EDIT_REPLACE;
+        replaceWith = e;
+        moveFocus(DOCK, Math.min(dockIdx, dock.size() - 1));
+    }
+
+    private void finishReplace() {
+        editMode = EDIT_NONE;
+        AppEntry with = replaceWith;
+        replaceWith = null;
+        if (with != null && dockIdx < dock.size()) {
+            pendingDockFocus = with.pkg;
+            List<String> d = dockPkgs();
+            d.set(dockIdx, with.pkg);
+            DockConfig.save(this, d);
+        }
+        updateHero(true);
+    }
+
+    private void startWiggle(View v) {
+        stopWiggle();
+        wiggle = ValueAnimator.ofFloat(-1.6f, 1.6f);
+        wiggle.setDuration(140);
+        wiggle.setRepeatCount(ValueAnimator.INFINITE);
+        wiggle.setRepeatMode(ValueAnimator.REVERSE);
+        wiggle.addUpdateListener(a -> v.setRotation((float) a.getAnimatedValue()));
+        wiggle.start();
+        wiggle.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                v.setRotation(0f);
+            }
+        });
+    }
+
+    private void stopWiggle() {
+        if (wiggle != null) {
+            wiggle.cancel();
+            wiggle = null;
+        }
     }
 
     // ---------------------------------------------------------------- status
@@ -1138,6 +1359,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        DockConfig.removeListener(dockChanged);
         unregisterReceiver(packageReceiver);
         worker.shutdownNow();
         super.onDestroy();
