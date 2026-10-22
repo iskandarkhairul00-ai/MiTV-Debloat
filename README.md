@@ -208,7 +208,7 @@ The card sits under the pills, starting at the Inputs pill. It shows:
 
 | Row | Cells |
 |---|---|
-| 1 | CPU clock (average of the cores), RAM used/total, storage used/total (`/data`), uptime |
+| 1 | CPU clock (average of the cores), RAM used/installed (2 GB; the ~250 MB the firmware reserves for video counts as used), storage used/total for the whole 16 GB chip as in Settings (system partitions count as used), uptime |
 | 2 | IP address, Wi-Fi signal (dBm and link speed), Private DNS, USB debugging |
 
 - **Bars:** RAM and storage turn amber over 80% and red over 92%.

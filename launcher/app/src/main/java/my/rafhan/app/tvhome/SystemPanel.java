@@ -1,6 +1,7 @@
 package my.rafhan.app.tvhome;
 
 import android.app.ActivityManager;
+import android.app.usage.StorageStatsManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.database.ContentObserver;
@@ -19,6 +20,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.StatFs;
+import android.os.storage.StorageManager;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -160,22 +162,47 @@ final class SystemPanel {
             cpu.set("—", "CPU", TEXT, -1);
         }
 
+        // Installed RAM, not what the kernel gets: the firmware keeps ~250 MB for video and the
+        // GPU, so a 2 GB TV reports 1.8 GB. That reserve counts as used, like Settings does for
+        // the system partitions on the disk.
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
-        long used = mi.totalMem - mi.availMem;
-        float f = mi.totalMem > 0 ? used / (float) mi.totalMem : 0;
-        ram.set(Math.round(f * 100) + "%", "RAM " + gb(used) + "/" + gb(mi.totalMem) + "G", TEXT, f);
+        long total = installedRam(mi.totalMem), used = total - mi.availMem;
+        float f = total > 0 ? used / (float) total : 0;
+        ram.set(Math.round(f * 100) + "%", "RAM " + gb(used) + "/" + gbRound(total / 1073741824.0) + "G", TEXT, f);
 
         long s = SystemClock.elapsedRealtime() / 60000;
         long d = s / 1440, h = (s / 60) % 24, m = s % 60;
         uptime.set(d > 0 ? d + "d " + h + "h" : h + "h " + m + "m", "UPTIME", TEXT, -1);
     }
 
+    /**
+     * The whole storage chip, as Settings shows it (16 GB), not just the /data partition
+     * (11.4 GB): the system partitions count as used. Sizes are decimal GB, like Settings.
+     */
     private void refreshDisk() {
-        StatFs fs = new StatFs(Environment.getDataDirectory().getPath());
-        long total = fs.getTotalBytes(), used = total - fs.getAvailableBytes();
+        long total, free;
+        try {
+            StorageStatsManager ssm = ctx.getSystemService(StorageStatsManager.class);
+            total = ssm.getTotalBytes(StorageManager.UUID_DEFAULT);
+            free = ssm.getFreeBytes(StorageManager.UUID_DEFAULT);
+        } catch (Exception e) {
+            StatFs fs = new StatFs(Environment.getDataDirectory().getPath());
+            total = fs.getTotalBytes();
+            free = fs.getAvailableBytes();
+        }
+        long used = total - free;
         float f = total > 0 ? used / (float) total : 0;
-        disk.set(Math.round(f * 100) + "%", "DISK " + gb(used) + "/" + gb(total) + "G", TEXT, f);
+        disk.set(Math.round(f * 100) + "%", "DISK " + fmt1(used / 1e9) + "/" + gbRound(total / 1e9) + "G", TEXT, f);
+    }
+
+    /** Rounds what the kernel reports up to the nearest size RAM is sold in. */
+    private static long installedRam(long reported) {
+        double g = reported / 1073741824.0;
+        for (double size : new double[] {0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32}) {
+            if (g <= size) return (long) (size * 1073741824L);
+        }
+        return reported;
     }
 
     // ---------------------------------------------------------------- event driven
@@ -265,6 +292,11 @@ final class SystemPanel {
 
     private static String gb(long bytes) {
         return fmt1(bytes / 1073741824.0);
+    }
+
+    /** "2" / "16" for whole sizes, "1.5" otherwise. */
+    private static String gbRound(double g) {
+        return Math.abs(g - Math.round(g)) < 0.05 ? String.valueOf(Math.round(g)) : fmt1(g);
     }
 
     private static String fmt1(double v) {
