@@ -82,7 +82,15 @@ final class FileApi {
         for (Root r : roots()) {
             arr.put(new JSONObject().put("name", r.name).put("path", r.dir.getPath()).put("free", new StatFs(r.dir.getPath()).getAvailableBytes()));
         }
-        return new JSONObject().put("ok", true).put("roots", arr);
+        // Shortcut to the folder the TV's Settings → Wallpaper list reads.
+        File walls = Wallpapers.folder();
+        if (!walls.isDirectory()) walls.mkdirs();
+        JSONArray shortcuts = new JSONArray();
+        if (walls.isDirectory()) {
+            shortcuts.put(new JSONObject().put("name", "Wallpapers").put("path", canonical(walls).getPath())
+                    .put("hint", "Pictures here appear in the TV's wallpaper list"));
+        }
+        return new JSONObject().put("ok", true).put("roots", arr).put("shortcuts", shortcuts);
     }
 
     /** {path, root, rootPath, parent, entries:[{name, dir, size, mtime}]}; null if the path isn't allowed. */

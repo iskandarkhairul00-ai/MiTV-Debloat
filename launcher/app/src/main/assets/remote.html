@@ -491,6 +491,8 @@ async function loadFiles(path) {
       $("uploadBtn").disabled = true;
       box.innerHTML = "";
       r.roots.forEach((root) => box.appendChild(row(ICONS.drive, root.name, size(root.free) + " free", () => loadFiles(root.path))));
+      // Shortcuts, e.g. the folder the TV's wallpaper list reads.
+      (r.shortcuts || []).forEach((sc) => box.appendChild(row(ICONS.image, sc.name, sc.hint, () => loadFiles(sc.path))));
       return;
     }
     const r = await api("/api/files/list?path=" + encodeURIComponent(path));

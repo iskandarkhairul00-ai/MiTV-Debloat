@@ -197,7 +197,7 @@ The gear at the end of the top bar opens the launcher's Settings: categories on 
 
 | Category | Options |
 |---|---|
-| Home screen | Clock Auto / 12-hour / 24-hour, Most used card, Most used: leave out (app picker), System card, Now Playing card, wallpaper dim (Off/Low/Medium/High), remove wallpaper. A hidden card's column closes up. |
+| Home screen | Clock Auto / 12-hour / 24-hour, Most used card, Most used: leave out (app picker), System card, Now Playing card, wallpaper dim (Off/Low/Medium/High), wallpaper (six built-in photos, your picture or none). A hidden card's column closes up. |
 | Prayer times | Zone (picker), prayer card on/off |
 | Notifications | Play Store updates, new HDMI devices, Bluetooth, low memory (each on/off), low-memory level 80/85/90 %, connection banner |
 | Phone remote | Remote on/off (the banner and bell keep working when it's off), its address, forget all paired phones (press OK twice) |
@@ -330,15 +330,27 @@ The dock holds **up to 5 apps**, in any order.
 
 ### Change the wallpaper
 
-The background is pitch black by default. To use a picture (ideally 1920×1080, JPG/PNG/WebP):
-```bash
-adb push mypicture.jpg /sdcard/Android/data/my.rafhan.app.tvhome/files/wallpaper.jpg
-```
-Open any app and press Home: the picture shows up, dimmed so text stays readable (how much: **Settings → Home screen → Wallpaper dim**). To go back to black, use **Settings → Home screen → Remove wallpaper**, or:
-```bash
-adb shell rm /sdcard/Android/data/my.rafhan.app.tvhome/files/wallpaper.jpg
-```
-(These files are deleted if the launcher is uninstalled.)
+**Settings → Home screen → Wallpaper** offers seven photos (lakes, landscapes, forest, night sky and a galaxy), **Your picture** (if you pushed one) and **None**. The photos aren't in the APK. The TV downloads each one once (1920 px, 0.5–1 MB) from Wikimedia Commons and keeps it in the launcher's storage:
+- the default (Stargazer, the first in the list) on first start;
+- the rest when you first open the Wallpaper list, where their thumbnails appear as they land.
+
+Moving the focus through the list previews each one behind Settings; **OK** sets it, and Back without OK keeps the one you had. **Wallpaper dim** sets how dark it is behind the cards.
+
+| Wallpaper | Photo | Credit · licence |
+|---|---|---|
+| Stargazer (default) | [Looking at the stars during the Perseids](https://commons.wikimedia.org/wiki/File:018_Human_looking_at_the_stars_during_Perseids_with_the_Milky_Way_in_the_background_Photo_by_Giles_Laurent.jpg) | Giles Laurent · CC BY-SA 4.0 |
+| Lake Seliger | [Lake Seliger, view of Voroniy Island](https://commons.wikimedia.org/wiki/File:Lake_Seliger._Ostashkov._View_of_Voroniy_Island.jpg) | Aleksandr Baydukov · CC BY-SA 4.0 |
+| Misty sunrise | [Dülmen, Umland, 2014](https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Umland_--_2014_--_7056.jpg) | Dietmar Rabich · CC BY-SA 4.0 |
+| Galaxy M81 | [Messier 81 (Hubble)](https://commons.wikimedia.org/wiki/File:Messier_81_HST.jpg) | NASA, ESA and the Hubble Heritage Team · public domain |
+| Dome Creek | [Lake in Dome Creek](https://commons.wikimedia.org/wiki/File:Lake_in_Dome_Creek.jpg) | Jakub Fryš · CC BY-SA 4.0 |
+| Forest light | [Roruper Holz nature reserve, 2021](https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Rorup,_NSG_Roruper_Holz_--_2021_--_8187-91.jpg) | Dietmar Rabich · CC BY-SA 4.0 |
+| Night clouds | [Noctilucent clouds over Kuresoo bog](https://commons.wikimedia.org/wiki/File:Helkivad_%C3%B6%C3%B6pilved_Kuresoo_kohal.jpg) | Martin Koitmäe · CC BY-SA 4.0 |
+
+**Your own pictures** go in the **Wallpapers** folder on the TV's internal storage (`/sdcard/Wallpapers`). Any JPG, PNG or WebP there shows up at the end of the Wallpaper list under its file name, with a thumbnail; preview and set it like the built-in ones. Ideally 1920×1080 or larger; big photos are scaled down when loaded.
+- **Phone remote:** Files tab → **Wallpapers** (the shortcut under the storage list) → Upload.
+- **ADB:** `adb push mypicture.jpg /sdcard/Wallpapers/`
+
+Deleting a picture that's in use switches back to the default. The folder survives a launcher uninstall; the downloaded built-in photos don't. (An older picture pushed to `Android/data/my.rafhan.app.tvhome/files/wallpaper.jpg` still appears as **Your picture**.)
 
 ### Hidden system apps
 

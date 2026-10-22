@@ -169,6 +169,10 @@ public class MainActivity extends Activity {
     private boolean appsLoaded;
     private boolean tilesDropped;
     private long wallpaperStamp = -1;
+    private boolean wallpaperFetching;
+    // Settings → Wallpaper list: the focused wallpaper, shown but not saved (null: the saved one).
+    private String wallpaperPreview;
+    private int wallpaperGen;
     private ConnectivityManager.NetworkCallback netCallback;
 
     private final Runnable reloadApps = this::loadApps;
@@ -299,7 +303,8 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void wallpaperRemoved() {
+            public void previewWallpaper(String id) {
+                wallpaperPreview = id;
                 loadWallpaper();
             }
         });
@@ -638,6 +643,7 @@ public class MainActivity extends Activity {
                     .setInterpolator(new DecelerateInterpolator(2f)).start();
             setSystemVisible(!onUpPage(newSection));
             nowPlaying.setVisible(!onUpPage(newSection));
+            showPeekFade(!onUpPage(newSection));
             if (onUpPage(newSection)) up.reload();
             else up.resetStatus();
         }
@@ -655,9 +661,14 @@ public class MainActivity extends Activity {
             } else {
                 settingsPage.animate().alpha(0f).setDuration(180)
                         .withEndAction(() -> settingsPage.setVisibility(View.GONE)).start();
+                if (wallpaperPreview != null) { // left Settings mid-preview (Home): saved one back
+                    wallpaperPreview = null;
+                    loadWallpaper();
+                }
             }
             setSystemVisible(!open);
             nowPlaying.setVisible(!open);
+            showPeekFade(!open);
         }
         if (onGridPage(oldSection) != onGridPage(newSection)) {
             boolean toGrid = onGridPage(newSection);
@@ -696,6 +707,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < NowPlayingPanel.BUTTONS; i++) applyLook(NOW, i, section == NOW && i == nowIdx, false);
         adapter.notifyDataSetChanged();
         setHomeVisible(!onGridPage(section), false);
+        if (onUpPage(section) || section == SETTINGS) findViewById(R.id.peekFade).setAlpha(0f);
         setSystemVisible(!onGridPage(section) && !onUpPage(section) && section != SETTINGS);
         nowPlaying.setVisible(!onGridPage(section) && !onUpPage(section) && section != SETTINGS);
         updateHero(false);
@@ -703,6 +715,16 @@ public class MainActivity extends Activity {
     }
 
     /** The clock, pills and dock fade out while the grid has the screen; the peek is dimmed on home. */
+    /**
+     * The peek shadow sits at the screen's bottom edge, outside the sliding page: hidden while
+     * the running-apps screen or Settings is up (the grid hides it via setHomeVisible).
+     */
+    private void showPeekFade(boolean show) {
+        View fade = findViewById(R.id.peekFade);
+        fade.animate().cancel();
+        fade.animate().alpha(show ? 1f : 0f).setDuration(show ? 320 : 220).start();
+    }
+
     private void setHomeVisible(boolean visible, boolean animate) {
         View topFade = findViewById(R.id.gridTopFade);
         topFade.animate().cancel();
@@ -1326,6 +1348,9 @@ public class MainActivity extends Activity {
             case LauncherSettings.WALL_DIM:
                 applyWallpaperDim();
                 break;
+            case LauncherSettings.WALLPAPER:
+                loadWallpaper();
+                break;
             case LauncherSettings.USAGE_EXCLUDED:
                 refreshUsage();
                 break;
@@ -1473,6 +1498,7 @@ public class MainActivity extends Activity {
         pills[PILL_WIFI].setContentDescription(st.pillLabel());
         system.refreshNetwork();
         prayer.onNetworkAvailable();
+        loadWallpaper(); // a built-in that couldn't download yet gets another try
     }
 
     /** Settings → Home screen → Wallpaper dim. */
@@ -1481,28 +1507,41 @@ public class MainActivity extends Activity {
         wallpaper.setColorFilter(Color.argb(a, 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
     }
 
+    /**
+     * The wallpaper chosen in Settings: a built-in photo (downloaded once, then cached), the
+     * picture pushed over ADB, or none. A built-in that isn't cached yet is fetched in the
+     * background and shown when it lands; until then home stays black.
+     */
     private void loadWallpaper() {
-        File dir = getExternalFilesDir(null);
-        File found = null;
-        if (dir != null) {
-            for (String name : new String[] {"wallpaper.jpg", "wallpaper.png", "wallpaper.webp"}) {
-                File f = new File(dir, name);
-                if (f.isFile()) {
-                    found = f;
-                    break;
-                }
-            }
+        String choice = wallpaperPreview != null ? wallpaperPreview : LauncherSettings.wallpaper(this);
+        File found = Wallpapers.file(this, choice);
+        // Previewing one that's still downloading: keep what's showing until it lands.
+        if (found == null && wallpaperPreview != null && !Wallpapers.NONE.equals(choice)) return;
+        if (found == null && Wallpapers.photo(choice) != null && !wallpaperFetching) {
+            wallpaperFetching = true;
+            new Thread(() -> {
+                boolean ok = Wallpapers.fetch(this, choice);
+                main.post(() -> {
+                    wallpaperFetching = false;
+                    if (ok) loadWallpaper();
+                });
+            }, "wallpaper-fetch").start();
         }
-        long stamp = found == null ? 0 : found.lastModified() ^ found.length();
+        long stamp = found == null ? 0 : found.getPath().hashCode() * 31L ^ found.lastModified() ^ found.length();
         if (stamp == wallpaperStamp) return;
         wallpaperStamp = stamp;
+        // Over a wallpaper the peek shadow is light; on plain black it fades to near-black.
+        findViewById(R.id.peekFade).setBackgroundResource(found != null ? R.drawable.peek_fade_soft : R.drawable.peek_fade);
         if (found == null) {
+            wallpaperGen++; // drop a decode still in flight
             wallpaper.setImageDrawable(null);
             wallpaper.setVisibility(View.GONE);
             return;
         }
         File file = found;
+        int gen = ++wallpaperGen; // quick scrolling through previews: only the last one is shown
         worker.execute(() -> {
+            if (gen != wallpaperGen) return;
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(file.getPath(), o);
@@ -1514,7 +1553,7 @@ public class MainActivity extends Activity {
             o.inPreferredConfig = Bitmap.Config.RGB_565;
             Bitmap bmp = BitmapFactory.decodeFile(file.getPath(), o);
             main.post(() -> {
-                if (bmp == null) return;
+                if (bmp == null || gen != wallpaperGen) return;
                 wallpaper.setImageBitmap(bmp);
                 // Dim it so text and tiles stay readable.
                 applyWallpaperDim();

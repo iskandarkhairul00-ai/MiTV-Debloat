@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -20,9 +22,11 @@ import java.io.File;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
@@ -54,8 +58,8 @@ final class SettingsScreen {
 
         void openTvSettings();
 
-        /** The wallpaper file was deleted. */
-        void wallpaperRemoved();
+        /** Shows a wallpaper without saving it (focus in the Wallpaper list); null: the saved one. */
+        void previewWallpaper(String id);
     }
 
     private static final class Row {
@@ -67,6 +71,9 @@ final class SettingsScreen {
         Supplier<String> value;
         Runnable action;
         boolean checked;
+        String id;         // wallpaper list: what this row shows
+        boolean thumbSlot; // wallpaper list: a small preview on the left
+        Bitmap thumb;
 
         Row(int type, String label) {
             this.type = type;
@@ -98,6 +105,9 @@ final class SettingsScreen {
         this.worker = worker;
         this.host = host;
         dp = ctx.getResources().getDisplayMetrics().density;
+        // Dark backdrop: text stays readable over bright wallpapers, which still show through
+        // (dimmed) as a preview while picking one.
+        root.setBackgroundColor(0xB8000000);
 
         // Title: [gear] Settings / Category
         LinearLayout title = new LinearLayout(ctx);
@@ -230,6 +240,7 @@ final class SettingsScreen {
             } else {
                 scrollToFocus(); // long lists (zones) aren't rebuilt per key press
                 host.onFocusMoved();
+                if (inWallpaperList()) host.previewWallpaper(picker.get(row).id);
             }
         }
     }
@@ -305,6 +316,7 @@ final class SettingsScreen {
     }
 
     private void closePicker() {
+        if (inWallpaperList()) host.previewWallpaper(null); // left without OK: back to the saved one
         picker = null;
         row = pickerFrom;
         rows = rowsFor(cat);
@@ -356,17 +368,19 @@ final class SettingsScreen {
         out.add(toggle(LauncherSettings.SHOW_NOW, "Now Playing card", "Cover, title and controls while something plays"));
         out.add(choice(LauncherSettings.WALL_DIM, "Wallpaper dim", "How dark the wallpaper is behind the cards",
                 new int[] {0, 1, 2, 3}, new String[] {"Off", "Low", "Medium", "High"}));
-        File wall = wallpaperFile();
-        Row w = new Row(wall != null ? ACTION : INFO, wall != null ? "Remove wallpaper" : "Wallpaper");
-        w.sub = wall != null ? "Back to the plain dark background"
-                : "Put a picture at Android/data/" + ctx.getPackageName() + "/files/wallpaper.jpg";
-        w.value = () -> wall != null ? wall.getName() : "None";
-        w.action = () -> {
-            File f;
-            while ((f = wallpaperFile()) != null && f.delete()) { /* jpg, png and webp */ }
-            host.wallpaperRemoved();
-        };
+        Row w = new Row(PICKER, "Wallpaper");
+        w.sub = "Seven photos, or your own: phone remote → Files → Wallpapers";
+        String name = wallpaperName(LauncherSettings.wallpaper(ctx));
+        w.value = () -> name;
+        w.action = this::openWallpaperPicker;
         out.add(w);
+    }
+
+    private String wallpaperName(String choice) {
+        if (Wallpapers.CUSTOM.equals(choice)) return "Your picture";
+        if (choice.startsWith(Wallpapers.FILE)) return baseName(choice.substring(Wallpapers.FILE.length()));
+        Wallpapers.Photo p = Wallpapers.photo(choice);
+        return p != null ? p.name : "None";
     }
 
     private void alertRows(List<Row> out) {
@@ -459,6 +473,149 @@ final class SettingsScreen {
         openPicker("Zone", items, focus);
     }
 
+    private static final String WALLPAPER_TITLE = "Wallpaper";
+    private final Map<String, Bitmap> thumbs = new HashMap<>();
+    private final Set<String> failed = new HashSet<>();
+    private boolean fetchingWallpapers;
+
+    /**
+     * None, the built-ins (thumbnail, credit) and the pushed picture if any. Opening it downloads
+     * the built-ins not cached yet, one by one; rows update as each lands. Moving the focus
+     * previews a wallpaper behind Settings; OK sets it; Back without OK restores the saved one.
+     */
+    private void openWallpaperPicker() {
+        List<Row> items = wallpaperRows();
+        int focus = 0;
+        for (int i = 0; i < items.size(); i++) if (items.get(i).checked) focus = i;
+        openPicker(WALLPAPER_TITLE, items, focus);
+        fetchWallpapers();
+    }
+
+    private List<Row> wallpaperRows() {
+        String current = LauncherSettings.wallpaper(ctx);
+        List<Row> items = new ArrayList<>();
+        Row none = new Row(CHECK, "None");
+        none.sub = "Plain dark background";
+        none.thumbSlot = true;
+        none.checked = Wallpapers.NONE.equals(current);
+        none.id = Wallpapers.NONE;
+        none.action = () -> pickWallpaper(Wallpapers.NONE);
+        items.add(none);
+        for (Wallpapers.Photo p : Wallpapers.BUILT_IN) {
+            Row r = new Row(CHECK, p.name);
+            boolean cached = Wallpapers.isCached(ctx, p.id);
+            r.sub = cached ? "Photo: " + p.credit + " · Wikimedia Commons"
+                    : failed.contains(p.id) ? "Couldn't download. Check the internet connection" : "Downloading…";
+            r.thumbSlot = true;
+            r.thumb = thumbs.get(p.id);
+            r.checked = p.id.equals(current);
+            r.id = p.id;
+            r.action = () -> pickWallpaper(p.id);
+            items.add(r);
+        }
+        List<File> mine = Wallpapers.userPictures();
+        for (File f : mine) {
+            String id = Wallpapers.FILE + f.getName();
+            Row r = new Row(CHECK, baseName(f.getName()));
+            r.sub = "Wallpapers folder · " + String.format(Locale.US, "%.1f MB", f.length() / 1048576.0);
+            r.thumbSlot = true;
+            r.thumb = thumbs.get(thumbKey(f));
+            r.checked = id.equals(current);
+            r.id = id;
+            r.action = () -> pickWallpaper(id);
+            items.add(r);
+        }
+        if (mine.isEmpty()) {
+            Row r = new Row(INFO, "Add your own");
+            r.sub = "On the phone remote: Files → Wallpapers → upload a picture. It shows up here.";
+            items.add(r);
+        }
+        File custom = Wallpapers.custom(ctx);
+        if (custom != null) {
+            Row r = new Row(CHECK, "Your picture");
+            r.sub = "Android/data/" + ctx.getPackageName() + "/files/" + custom.getName();
+            r.thumbSlot = true;
+            r.thumb = thumbs.get(Wallpapers.CUSTOM);
+            r.checked = Wallpapers.CUSTOM.equals(current);
+            r.id = Wallpapers.CUSTOM;
+            r.action = () -> pickWallpaper(Wallpapers.CUSTOM);
+            items.add(r);
+        }
+        return items;
+    }
+
+    /** OK: the previewed wallpaper becomes the saved one. */
+    private void pickWallpaper(String id) {
+        LauncherSettings.setWallpaper(ctx, id);
+        host.previewWallpaper(null);
+        refreshWallpaperRows();
+    }
+
+    private boolean inWallpaperList() {
+        return picker != null && WALLPAPER_TITLE.equals(pickerTitle);
+    }
+
+    /** Rebuilds the wallpaper list in place if it's still open (download finished, choice made). */
+    private void refreshWallpaperRows() {
+        if (picker == null || !WALLPAPER_TITLE.equals(pickerTitle)) return;
+        picker = wallpaperRows();
+        renderRows();
+    }
+
+    /** Downloads the built-ins not cached yet and makes thumbnails, on a background thread. */
+    private void fetchWallpapers() {
+        if (fetchingWallpapers) return;
+        fetchingWallpapers = true;
+        failed.clear();
+        new Thread(() -> {
+            List<String> ids = new ArrayList<>();
+            for (Wallpapers.Photo p : Wallpapers.BUILT_IN) ids.add(p.id);
+            for (File f : Wallpapers.userPictures()) {
+                String key = thumbKey(f);
+                if (thumbs.containsKey(key)) continue;
+                Bitmap t = thumbnail(f);
+                main.post(() -> {
+                    if (t != null) thumbs.put(key, t);
+                    refreshWallpaperRows();
+                });
+            }
+            if (Wallpapers.custom(ctx) != null) ids.add(Wallpapers.CUSTOM);
+            for (String id : ids) {
+                boolean ok = Wallpapers.CUSTOM.equals(id) || Wallpapers.fetch(ctx, id);
+                File f = ok ? Wallpapers.file(ctx, id) : null;
+                Bitmap t = f != null && !thumbs.containsKey(id) ? thumbnail(f) : null;
+                main.post(() -> {
+                    if (!ok) failed.add(id);
+                    if (t != null) thumbs.put(id, t);
+                    refreshWallpaperRows();
+                });
+            }
+            main.post(() -> fetchingWallpapers = false);
+        }, "wallpaper-thumbs").start();
+    }
+
+    /** Downscaled to about 240 px wide: enough for the list's 96 dp preview. */
+    private static Bitmap thumbnail(File f) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(f.getPath(), o);
+        o.inSampleSize = 1;
+        while (o.outWidth / (o.inSampleSize * 2) >= 240) o.inSampleSize *= 2;
+        o.inJustDecodeBounds = false;
+        o.inPreferredConfig = Bitmap.Config.RGB_565;
+        return BitmapFactory.decodeFile(f.getPath(), o);
+    }
+
+    /** A picture replaced under the same name gets a new thumbnail. */
+    private static String thumbKey(File f) {
+        return Wallpapers.FILE + f.getName() + "@" + f.lastModified();
+    }
+
+    private static String baseName(String file) {
+        int dot = file.lastIndexOf('.');
+        return dot > 0 ? file.substring(0, dot) : file;
+    }
+
     private void openUsagePicker() {
         Set<String> excluded = LauncherSettings.usageExcluded(ctx);
         int from = row;
@@ -497,7 +654,8 @@ final class SettingsScreen {
         }
         crumb.setText("/  " + CATS[cat] + (picker != null ? "  /  " + pickerTitle : ""));
         paneTitle.setText(picker != null ? pickerTitle : CATS[cat]);
-        paneSub.setText(picker != null ? (picker.size() + " items") : CAT_SUBS[cat]);
+        paneSub.setText(inWallpaperList() ? "Move to preview  ·  OK to set"
+                : picker != null ? (picker.size() + " items") : CAT_SUBS[cat]);
         renderRows();
     }
 
@@ -526,6 +684,16 @@ final class SettingsScreen {
         v.setGravity(Gravity.CENTER_VERTICAL);
         v.setMinimumHeight(px(58));
         v.setPadding(px(16), px(9), px(14), px(9));
+        if (r.thumbSlot) {
+            ImageView t = new ImageView(ctx);
+            t.setBackgroundResource(R.drawable.tile_bg);
+            t.setClipToOutline(true);
+            t.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            if (r.thumb != null) t.setImageBitmap(r.thumb);
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(px(96), px(54));
+            tl.setMarginEnd(px(16));
+            v.addView(t, tl);
+        }
 
         LinearLayout texts = new LinearLayout(ctx);
         texts.setOrientation(LinearLayout.VERTICAL);
@@ -629,16 +797,6 @@ final class SettingsScreen {
         for (String e : ctx.getResources().getStringArray(R.array.prayer_zones)) {
             String[] z = e.split("\\|", 3);
             if (z[1].equals(code)) return z;
-        }
-        return null;
-    }
-
-    private File wallpaperFile() {
-        File dir = ctx.getExternalFilesDir(null);
-        if (dir == null) return null;
-        for (String n : new String[] {"wallpaper.jpg", "wallpaper.png", "wallpaper.webp"}) {
-            File f = new File(dir, n);
-            if (f.isFile()) return f;
         }
         return null;
     }

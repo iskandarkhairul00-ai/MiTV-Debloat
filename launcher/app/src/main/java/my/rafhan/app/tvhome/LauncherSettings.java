@@ -23,7 +23,7 @@ final class LauncherSettings {
             USAGE_EXCLUDED = "usage_excluded", WALL_DIM = "wallpaper_dim",
             ALERT_PLAY = "alert_play", ALERT_HDMI = "alert_hdmi", ALERT_BT = "alert_bluetooth",
             ALERT_MEMORY = "alert_memory", MEMORY_LEVEL = "memory_level", NET_BANNER = "net_banner",
-            REMOTE = "remote_on";
+            REMOTE = "remote_on", WALLPAPER = "wallpaper";
 
     /** Clock format: follow the TV, or force one. */
     static final int CLOCK_AUTO = 0, CLOCK_12 = 1, CLOCK_24 = 2;
@@ -92,6 +92,25 @@ final class LauncherSettings {
     static void setZone(Context ctx, String zone) {
         prefs(ctx).edit().putString(ZONE, zone).apply();
         changed(ZONE);
+    }
+
+    /**
+     * "none", a built-in id (Wallpapers.BUILT_IN) or "custom". Default: a picture pushed over
+     * ADB if there is one (as before Settings existed), else the first built-in.
+     */
+    static String wallpaper(Context ctx) {
+        String w = prefs(ctx).getString(WALLPAPER, null);
+        // A built-in that was replaced in an update falls back to the default.
+        if (w != null && (w.equals(Wallpapers.NONE) || w.equals(Wallpapers.CUSTOM) || Wallpapers.photo(w) != null
+                || (w.startsWith(Wallpapers.FILE) && Wallpapers.file(ctx, w) != null))) {
+            return w; // a picture deleted from the Wallpapers folder falls back too
+        }
+        return Wallpapers.custom(ctx) != null ? Wallpapers.CUSTOM : Wallpapers.DEFAULT;
+    }
+
+    static void setWallpaper(Context ctx, String id) {
+        prefs(ctx).edit().putString(WALLPAPER, id).apply();
+        changed(WALLPAPER);
     }
 
     static boolean use24h(Context ctx) {
