@@ -237,6 +237,13 @@
         android:background="@drawable/grid_top_fade"
         android:importantForAccessibility="no" />
 
+    <!-- Screen above home (Up from the top bar): running apps etc. Slid in by MainActivity;
+         below the menu so the hold-OK options open over it. -->
+    <FrameLayout
+        android:id="@+id/upPage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <LinearLayout
         android:id="@+id/menu"
         android:layout_width="240dp"

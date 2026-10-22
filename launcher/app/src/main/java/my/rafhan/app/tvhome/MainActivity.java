@@ -65,7 +65,7 @@ import java.util.concurrent.Executors;
  * outcome: Up/Down move one row, Up from the dock goes to the top bar, row and bar ends stop.
  */
 public class MainActivity extends Activity {
-    private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4;
+    private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4, UP = 5;
     private static final float NOW_SCALE = 1.12f;
     private static final int RIGHT_CARD_W = 412; // System and Now Playing cards, dp
     private static final int COLS = 5, DOCK_SIZE = DockConfig.MAX;
@@ -101,6 +101,8 @@ public class MainActivity extends Activity {
     private View[] homeViews;
     private SystemPanel system;
     private NowPlayingPanel nowPlaying;
+    private UpScreen up;
+    private FrameLayout upPage;
     private PrayerPanel prayer;
     private UsagePanel usage;
     private Map<String, Long> usageScores = new HashMap<>();
@@ -150,12 +152,15 @@ public class MainActivity extends Activity {
     private List<AppEntry> dock = new ArrayList<>();
     private List<AppEntry> apps = new ArrayList<>();
 
-    private int section = DOCK, topIdx, dockIdx, gridIdx, menuIdx, nowIdx;
+    private int section = DOCK, topIdx, dockIdx, gridIdx, menuIdx, nowIdx, upIdx;
     // Where the grid's scroll is heading (scrollGridToRow / return home); the highlight is placed
     // against this, so it goes straight to its final spot while the list scrolls under it.
     private int gridScrollTarget;
     private int armedKey = KeyEvent.KEYCODE_UNKNOWN;
     private boolean resumed;
+    // Home was hidden (another app on top) since it was last resumed. Android pauses an
+    // activity before handing it a new intent, so `resumed` can't tell "Home pressed on home".
+    private boolean hiddenSinceResume;
     // Cards that refresh (System, Now Playing) run only while home is resumed AND has window
     // focus: the screensaver (a daydream window) covers home without pausing it.
     private boolean live;
@@ -229,6 +234,14 @@ public class MainActivity extends Activity {
             if (!shown && section == NOW && !dock.isEmpty()) moveFocus(DOCK, dockIdx);
         });
         prayer = new PrayerPanel(this, findViewById(R.id.prayerPanel), hijri, worker);
+        upPage = findViewById(R.id.upPage);
+        upPage.setTranslationY(-screenH);
+        up = new UpScreen(this, upPage, worker, () -> {
+            if (section != UP) return;
+            if (up.count() == 0) upIdx = 0;
+            else upIdx = clamp(upIdx, up.count());
+            up.setFocused(upIdx);
+        });
         usage = new UsagePanel(this, findViewById(R.id.usagePanel));
         alignSystemPanel();
         centreDatesOnClock();
@@ -570,6 +583,7 @@ public class MainActivity extends Activity {
             case DOCK: return dockIdx;
             case GRID: return gridIdx;
             case NOW: return nowIdx;
+            case UP: return upIdx;
             default: return menuIdx;
         }
     }
@@ -583,9 +597,22 @@ public class MainActivity extends Activity {
             case DOCK: dockIdx = newIndex; break;
             case GRID: gridIdx = newIndex; break;
             case NOW: nowIdx = newIndex; break;
+            case UP: upIdx = newIndex; break;
             default: menuIdx = newIndex; break;
         }
         applyLook(section, newIndex, true, true);
+        // The running-apps screen sits a screen above home: slide both down to show it.
+        if (onUpPage(oldSection) != onUpPage(newSection)) {
+            float y = onUpPage(newSection) ? screenH : 0;
+            page.animate().translationY(y).setDuration(420).setInterpolator(new DecelerateInterpolator(2f)).start();
+            upPage.animate().translationY(y - screenH).setDuration(420)
+                    .setInterpolator(new DecelerateInterpolator(2f)).start();
+            system.setVisible(!onUpPage(newSection));
+            nowPlaying.setVisible(!onUpPage(newSection));
+            if (onUpPage(newSection)) up.reload();
+            else up.resetStatus();
+        }
+        if (newSection == UP) up.setFocused(newIndex);
         if (onGridPage(oldSection) != onGridPage(newSection)) {
             boolean toGrid = onGridPage(newSection);
             page.animate().translationY(toGrid ? -gridShift() : 0)
@@ -612,6 +639,10 @@ public class MainActivity extends Activity {
         return sec == GRID || (sec == MENU && menuReturnSection == GRID);
     }
 
+    private boolean onUpPage(int sec) {
+        return sec == UP || (sec == MENU && menuReturnSection == UP);
+    }
+
     /** Re-applies every focus visual without animation (after reloads / restore). */
     private void refreshFocusLook() {
         for (int i = 0; i < pills.length; i++) applyLook(TOP, i, section == TOP && i == topIdx, false);
@@ -619,8 +650,8 @@ public class MainActivity extends Activity {
         for (int i = 0; i < NowPlayingPanel.BUTTONS; i++) applyLook(NOW, i, section == NOW && i == nowIdx, false);
         adapter.notifyDataSetChanged();
         setHomeVisible(!onGridPage(section), false);
-        system.setVisible(!onGridPage(section));
-        nowPlaying.setVisible(!onGridPage(section));
+        system.setVisible(!onGridPage(section) && !onUpPage(section));
+        nowPlaying.setVisible(!onGridPage(section) && !onUpPage(section));
         updateHero(false);
         page.invalidate();
     }
@@ -733,11 +764,17 @@ public class MainActivity extends Activity {
                 scale = NOW_SCALE;
                 radius = v.getHeight() * scale / 2f;
                 break;
+            case UP:
+                v = up.row(upIdx);
+                break;
         }
+        // Nothing to frame while the running-apps list is empty or loading.
+        highlight.setVisibility(section == UP && v == null ? View.INVISIBLE : View.VISIBLE);
         if (v == null || v.getWidth() == 0) return;
         // Frame the highlight rides with: the menu (fixed), the grid (page slide + list scroll),
         // or the rest of the page (page slide).
         if (section == MENU) highlight.setFrame(0, 0);
+        else if (section == UP) highlight.setFrame(3, upPage.getTranslationY());
         else if (section == GRID) highlight.setFrame(2 + gridScrollTarget, page.getTranslationY() - gridScrollTarget);
         else highlight.setFrame(1, page.getTranslationY());
         highlight.getLocationInWindow(loc);
@@ -809,7 +846,9 @@ public class MainActivity extends Activity {
                 if (down) onSide(1);
                 return true;
             case KeyEvent.KEYCODE_MENU:
-                if ((section != DOCK && section != GRID) || editMode != EDIT_NONE) return super.dispatchKeyEvent(e);
+                if ((section != DOCK && section != GRID && section != UP) || editMode != EDIT_NONE) {
+                    return super.dispatchKeyEvent(e);
+                }
                 if (down && e.getRepeatCount() == 0) openAppMenu();
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -817,7 +856,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 // Hold OK on an app: its options (the release mustn't also open the app).
                 if (down && e.getRepeatCount() == 1 && armedKey == code && editMode == EDIT_NONE
-                        && (section == DOCK || section == GRID)) {
+                        && (section == DOCK || section == GRID || section == UP)) {
                     armedKey = KeyEvent.KEYCODE_UNKNOWN;
                     openAppMenu();
                     return true;
@@ -850,6 +889,12 @@ public class MainActivity extends Activity {
             case NOW:
                 moveFocus(TOP, topIdx);
                 break;
+            case TOP:
+                moveFocus(UP, 0);
+                break;
+            case UP:
+                if (upIdx > 0) moveFocus(UP, upIdx - 1);
+                break;
             case GRID:
                 if (gridIdx >= COLS) moveFocus(GRID, gridIdx - COLS);
                 else if (!dock.isEmpty()) moveFocus(DOCK, Math.min(gridIdx, dock.size() - 1));
@@ -875,6 +920,10 @@ public class MainActivity extends Activity {
                 break;
             case NOW:
                 if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
+                break;
+            case UP:
+                if (upIdx < up.count() - 1) moveFocus(UP, upIdx + 1);
+                else moveFocus(TOP, topIdx); // past the last app: back home
                 break;
             case DOCK:
                 if (n > 0) moveFocus(GRID, Math.min(dockIdx, Math.min(COLS, n) - 1));
@@ -931,6 +980,12 @@ public class MainActivity extends Activity {
             return;
         }
         switch (section) {
+            case UP:
+                int kind = up.kind(upIdx);
+                if (kind == UpScreen.FOOTER) up.toggleHidden();
+                else if (kind == UpScreen.HIDDEN) openUpMenu();
+                else up.forceStop(upIdx);
+                break;
             case TOP:
                 if (topIdx == PILL_BELL) openBell();
                 else if (topIdx == PILL_INPUTS) openMenu();
@@ -967,6 +1022,7 @@ public class MainActivity extends Activity {
             return;
         }
         if (section == MENU) closeMenu();
+        else if (section == UP) moveFocus(TOP, topIdx);
         else if (section == GRID || section == TOP || section == NOW) {
             if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
         }
@@ -1053,6 +1109,10 @@ public class MainActivity extends Activity {
 
     /** Hold OK / Menu on a dock or grid tile: dock editing and Open. */
     private void openAppMenu() {
+        if (section == UP) {
+            openUpMenu();
+            return;
+        }
         boolean inDock = section == DOCK;
         AppEntry e = inDock ? (dockIdx < dock.size() ? dock.get(dockIdx) : null)
                 : (gridIdx < apps.size() ? apps.get(gridIdx) : null);
@@ -1087,6 +1147,28 @@ public class MainActivity extends Activity {
             // Above the tile when there's room (always for the dock), else below it.
             y = loc[1] - menuH - px(14) >= px(24) ? loc[1] - menuH - px(14) : loc[1] + h + px(14);
         }
+        showMenu(items, x, y);
+    }
+
+    /** Hold OK on a running app (or OK on a hidden one): hide / show it, force close, open. */
+    private void openUpMenu() {
+        RunningApps.App a = up.app(upIdx);
+        View row = up.row(upIdx);
+        if (a == null || row == null) return;
+        int i = upIdx;
+        List<MenuItem> items = new ArrayList<>();
+        if (a.hidden) {
+            items.add(new MenuItem("Show in list again", () -> up.setHidden(i, false)));
+        } else {
+            items.add(new MenuItem("Hide from this list", () -> up.setHidden(i, true)));
+            items.add(new MenuItem("Force close", () -> up.forceStop(i)));
+        }
+        items.add(new MenuItem("Open " + a.entry.label, () -> launch(a.entry)));
+        // Beside the row, in the empty second column.
+        row.getLocationInWindow(loc);
+        int menuH = px(46) * items.size() + px(16);
+        int x = Math.min(screenW - px(264), loc[0] + row.getWidth() + px(24));
+        int y = Math.max(px(24), Math.min(screenH - menuH - px(24), loc[1] + row.getHeight() / 2 - menuH / 2));
         showMenu(items, x, y);
     }
 
@@ -1141,10 +1223,10 @@ public class MainActivity extends Activity {
                 .withEndAction(() -> menu.setVisibility(View.GONE)).start();
         int sec = menuReturnSection, idx = menuReturnIdx;
         menuReturnSection = TOP;
-        if (sec == GRID) {
-            // Stay on the grid page: switch section without the page slide.
+        if (sec == GRID || sec == UP) {
+            // Stay on the grid / running-apps page: switch section without the page slide.
             section = MENU;
-            menuReturnSection = GRID;
+            menuReturnSection = sec;
         }
         moveFocus(sec, idx);
         menuReturnSection = TOP;
@@ -1344,6 +1426,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        hiddenSinceResume = false;
         IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
         tf.addAction(Intent.ACTION_TIME_CHANGED);
         tf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
@@ -1417,7 +1500,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         // Home pressed while already home: close the menu and go back to the dock.
-        if (resumed) {
+        if (!hiddenSinceResume) {
             if (section == MENU) closeMenu();
             if (section != DOCK && !dock.isEmpty()) moveFocus(DOCK, dockIdx);
         }
@@ -1435,6 +1518,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onStop() {
+        hiddenSinceResume = true;
         main.postDelayed(dropTiles, 30_000);
         if (netCallback != null) {
             getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback);

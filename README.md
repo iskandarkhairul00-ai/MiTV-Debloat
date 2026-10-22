@@ -121,7 +121,7 @@ adb shell settings put global private_dns_mode opportunistic
   - **Settings** opens the TV's Settings.
 - **Remote:**
   - Down from the dock slides up to all other apps (5 per row). Up/Down always move exactly one row.
-  - Up from the dock goes to the top bar.
+  - Up from the dock goes to the top bar. Up from the top bar slides down the running-apps screen (see below).
   - Ends of the top bar and rows don't wrap.
   - Back returns to the dock.
   - Home while already home jumps back to the dock.
@@ -178,6 +178,18 @@ Under the System card, whenever an app has a media session (RadioStream, Spotify
   - **USB debugging off:** no cover art or progress bar, so the app icon stands in.
   - **When it runs:** all of this only while the home screen is up and in focus. It stops under the screensaver.
 - **Apps that pause when hidden** (YouTube, Netflix) don't show up while you're on the home screen, because their session ends.
+
+### Running apps (Up from the top bar)
+
+Press **Up** on the top bar and the home screen slides away. A screen with three borderless columns comes down from above. Column 1 lists the running apps; columns 2 and 3 are empty for now.
+
+- **What's listed:** apps you can launch that have a process right now (from `dumpsys activity lru`, which uses the `DUMP` permission). Each row shows the icon, name, memory and state: **On screen**, **Service** (playing or running a foreground service), **Recent** or **Cached**. The most active apps come first, then the biggest.
+- **Left out:** the launcher itself, and apps with an enabled accessibility service (Button Mapper). Closing Button Mapper would stop the remote's remapped buttons.
+- **Remote:** Up/Down move between rows. **OK** force-closes the focused app (the round ✕ button turns amber on the focused row). Down past the last row, or **Back**, returns to the top bar.
+- **Hold OK** (or Menu) on an app: **Hide from this list**, **Force close** or **Open**. Hidden apps aren't offered for force close. They're kept under a **Hidden apps (n)** row at the bottom of the list (only while one of them is running): OK on it shows them, and OK on a hidden app gives **Show in list again**. The hidden list is saved on the TV and survives restarts and reinstalls (not a clean uninstall).
+- **USB debugging on:** force close runs `am force-stop` over the launcher's loopback ADB connection, so it closes anything, including apps that are playing. Memory (resident size, from `/proc/<pid>/status`) is read the same way.
+- **USB debugging off:** the launcher can only use Android's background kill (`KILL_BACKGROUND_PROCESSES`). It can't stop apps that are on screen or running a service, and the screen says so. Memory isn't shown.
+- **Refresh:** the list is read when the screen opens and after each close. Nothing runs while the screen is closed.
 
 ### Most used apps (last 7 days)
 
