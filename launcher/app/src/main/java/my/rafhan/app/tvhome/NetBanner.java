@@ -102,6 +102,15 @@ final class NetBanner {
     }
 
     private void show(NetState s, boolean wasWifi) {
+        showMessage(s.icon(), s.color(), s.bannerLabel(wasWifi), s.state == NetState.CONNECTED ? SHOW_MS : SHOW_MS * 2);
+    }
+
+    /** A glass banner at the top of the screen over any app; also used by AlertSources. */
+    void showMessage(int iconRes, int iconColor, String text, long millis) {
+        main.post(() -> showNow(iconRes, iconColor, text, millis));
+    }
+
+    private void showNow(int iconRes, int iconColor, String text, long millis) {
         if (!Settings.canDrawOverlays(ctx)) return;
         hideNow();
         float dp = ctx.getResources().getDisplayMetrics().density;
@@ -110,13 +119,16 @@ final class NetBanner {
         card.setBackgroundResource(R.drawable.pin_bg);
         card.setPadding(Math.round(16 * dp), Math.round(10 * dp), Math.round(20 * dp), Math.round(10 * dp));
         ImageView icon = new ImageView(ctx);
-        icon.setImageResource(s.icon());
-        icon.setImageTintList(ColorStateList.valueOf(s.color()));
+        icon.setImageResource(iconRes);
+        icon.setImageTintList(ColorStateList.valueOf(iconColor));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(Math.round(22 * dp), Math.round(22 * dp));
         ilp.setMarginEnd(Math.round(10 * dp));
         card.addView(icon, ilp);
         TextView t = new TextView(ctx);
-        t.setText(s.bannerLabel(wasWifi));
+        t.setText(text);
+        t.setSingleLine(true);
+        t.setMaxWidth(Math.round(720 * dp));
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
         t.setTextSize(16);
         t.setTextColor(0xFFFFFFFF);
         t.setTypeface(Fonts.outfit(ctx, 500));
@@ -133,7 +145,7 @@ final class NetBanner {
         try {
             wm.addView(card, lp);
             view = card;
-            main.postDelayed(hide, s.state == NetState.CONNECTED ? SHOW_MS : SHOW_MS * 2);
+            main.postDelayed(hide, millis);
         } catch (RuntimeException ignored) {
         }
     }

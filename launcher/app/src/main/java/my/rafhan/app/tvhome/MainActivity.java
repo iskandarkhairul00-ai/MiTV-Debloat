@@ -107,7 +107,11 @@ public class MainActivity extends Activity {
     private final GradientDrawable glowDrawable = new GradientDrawable();
     private int glowColor = Color.TRANSPARENT;
     private ValueAnimator glowAnim;
-    private TextView[] pills;
+    // Top bar, left to right: bell, Inputs, Wi-Fi, Settings (icon-only round buttons).
+    private static final int PILL_BELL = 0, PILL_INPUTS = 1, PILL_WIFI = 2, PILL_SETTINGS = 3;
+    private View[] pills;
+    private TextView bellBadge;
+    private final Alerts.Listener alertsChanged = this::updateBell;
     private LinearLayout dockRow;
     private RecyclerView grid;
     private final GridAdapter adapter = new GridAdapter();
@@ -116,10 +120,17 @@ public class MainActivity extends Activity {
     private static final class MenuItem {
         final String label;
         final Runnable action;
+        final int icon, iconColor;
 
         MenuItem(String label, Runnable action) {
+            this(label, action, 0, 0);
+        }
+
+        MenuItem(String label, Runnable action, int icon, int iconColor) {
             this.label = label;
             this.action = action;
+            this.icon = icon;
+            this.iconColor = iconColor;
         }
     }
 
@@ -134,6 +145,7 @@ public class MainActivity extends Activity {
     private String pendingDockFocus; // after a dock change, focus this app in the dock
     private ValueAnimator wiggle;
     private final DockConfig.Listener dockChanged = this::loadApps;
+    private long dockStamp; // dock.txt as of the last load: reload if it changed behind our back
 
     private List<AppEntry> dock = new ArrayList<>();
     private List<AppEntry> apps = new ArrayList<>();
@@ -204,8 +216,10 @@ public class MainActivity extends Activity {
         dockRow = findViewById(R.id.dockRow);
         grid = findViewById(R.id.grid);
         menu = findViewById(R.id.menu);
-        pills = new TextView[] {findViewById(R.id.pillInputs), findViewById(R.id.pillWifi),
+        pills = new View[] {findViewById(R.id.pillBell), findViewById(R.id.pillInputs), findViewById(R.id.pillWifi),
                 findViewById(R.id.pillSettings)};
+        bellBadge = findViewById(R.id.bellBadge);
+        bellBadge.setTypeface(Fonts.outfit(this, 600));
         homeViews = new View[] {findViewById(R.id.clockBlock), findViewById(R.id.pills), findViewById(R.id.dockBand),
                 findViewById(R.id.sysPanel), findViewById(R.id.prayerPanel), findViewById(R.id.usagePanel),
                 findViewById(R.id.peekFade), findViewById(R.id.nowPlaying)};
@@ -223,12 +237,9 @@ public class MainActivity extends Activity {
         clock.setTypeface(Fonts.outfit(this, 200));
         date.setTypeface(Fonts.outfit(this, 400));
         hero.setTypeface(Fonts.outfit(this, 300));
-        int[] icons = {R.drawable.ic_input, R.drawable.ic_wifi, R.drawable.ic_settings};
-        for (int i = 0; i < pills.length; i++) {
-            pills[i].setTypeface(Fonts.outfit(this, 500));
-            Drawable icon = getDrawable(icons[i]);
-            pills[i].setCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null);
-        }
+        for (View p : pills) ((ImageView) p).setImageTintList(android.content.res.ColorStateList.valueOf(0xE6FFFFFF));
+        Alerts.get().addListener(alertsChanged);
+        updateBell();
 
         glowDrawable.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         glowDrawable.setGradientRadius(px(410));
@@ -247,6 +258,7 @@ public class MainActivity extends Activity {
         // page slides, grid scrolls and tile scale animations without any polling.
         findViewById(R.id.root).getViewTreeObserver().addOnPreDrawListener(() -> {
             updateHighlight(false);
+            placeBellBadge();
             return true;
         });
 
@@ -373,7 +385,9 @@ public class MainActivity extends Activity {
     private void loadApps() {
         worker.execute(() -> {
             List<AppEntry> all = AppRepository.load(this);
+            long stamp = DockConfig.stamp(this);
             List<String> dockPkgs = DockConfig.load(this);
+            dockStamp = stamp;
             Map<String, Long> scores = UsageScores.week(this);
             main.post(() -> applyApps(all, dockPkgs, scores));
         });
@@ -918,8 +932,9 @@ public class MainActivity extends Activity {
         }
         switch (section) {
             case TOP:
-                if (topIdx == 0) openMenu();
-                else startSafely(new Intent(topIdx == 1 ? Settings.ACTION_WIFI_SETTINGS : Settings.ACTION_SETTINGS));
+                if (topIdx == PILL_BELL) openBell();
+                else if (topIdx == PILL_INPUTS) openMenu();
+                else startSafely(new Intent(topIdx == PILL_WIFI ? Settings.ACTION_WIFI_SETTINGS : Settings.ACTION_SETTINGS));
                 break;
             case DOCK:
                 if (dockIdx < dock.size()) launch(dock.get(dockIdx));
@@ -967,12 +982,71 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- inputs
 
+    /** Keeps the badge on the bell's top-right corner, following its zoom, page slides and fades. */
+    private void placeBellBadge() {
+        if (bellBadge.getVisibility() != View.VISIBLE) return;
+        View bell = pills[PILL_BELL];
+        if (bell.getWidth() == 0) return;
+        bell.getLocationInWindow(loc);
+        int bx = loc[0], by = loc[1];
+        ((View) bellBadge.getParent()).getLocationInWindow(loc);
+        float s = bell.getScaleX();
+        // scaled bell's top-right corner (scale is about the centre)
+        float right = bx - loc[0] + bell.getWidth() * (1 + s) / 2f;
+        float top = by - loc[1] + bell.getHeight() * (1 - s) / 2f;
+        float x = right - bellBadge.getWidth() + px(6), y = top - px(6);
+        if (bellBadge.getTranslationX() != x) bellBadge.setTranslationX(x);
+        if (bellBadge.getTranslationY() != y) bellBadge.setTranslationY(y);
+        float a = findViewById(R.id.pills).getAlpha();
+        if (bellBadge.getAlpha() != a) bellBadge.setAlpha(a);
+    }
+
+    /** Badge with the unread count; the bell turns amber while there's something new. */
+    private void updateBell() {
+        int n = Alerts.get().unread();
+        bellBadge.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
+        bellBadge.setText(n > 9 ? "9+" : String.valueOf(n));
+        bellBadge.post(this::placeBellBadge);
+        ((ImageView) pills[PILL_BELL]).setImageTintList(android.content.res.ColorStateList.valueOf(
+                n > 0 ? 0xFFFFB340 : 0xE6FFFFFF));
+    }
+
+    /** The bell's list: newest 5 alerts, OK opens one (and dismisses it), then Clear all. */
+    private void openBell() {
+        Alerts al = Alerts.get();
+        List<Alerts.Alert> list = al.list();
+        List<MenuItem> items = new ArrayList<>();
+        for (int i = 0; i < Math.min(5, list.size()); i++) {
+            Alerts.Alert a = list.get(i);
+            int icon = a.type == Alerts.PLAY ? R.drawable.ic_update : a.type == Alerts.HDMI ? R.drawable.ic_input
+                    : a.type == Alerts.BLUETOOTH ? R.drawable.ic_bluetooth : R.drawable.ic_ram;
+            int color = a.type == Alerts.MEMORY ? 0xFFFFB340 : a.type == Alerts.PLAY ? 0xFF63A4FF : 0xFF63D489;
+            String label = a.title + (a.text == null || a.text.isEmpty() ? "" : " — " + a.text) + "  ·  " + ago(a.time);
+            items.add(new MenuItem(label, () -> {
+                al.dismiss(a);
+                if (a.action != null) startSafely(new Intent(a.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }, icon, color));
+        }
+        if (items.isEmpty()) items.add(new MenuItem("No notifications", () -> { }, R.drawable.ic_bell, 0x8CFFFFFF));
+        else items.add(new MenuItem("Clear all", al::clear));
+        al.markAllSeen();
+        View bell = pills[PILL_BELL];
+        bell.getLocationInWindow(loc);
+        int w = 420;
+        showMenu(items, Math.min(loc[0], screenW - px(w + 24)), loc[1] + Math.round(bell.getHeight() * PILL_SCALE) + px(10), w);
+    }
+
+    private static String ago(long time) {
+        long m = Math.max(0, System.currentTimeMillis() - time) / 60_000;
+        return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? (m / 60) + "h" : (m / 1440) + "d";
+    }
+
     /** The Inputs pill: HDMI / AV / Live TV. */
     private void openMenu() {
         List<MenuItem> items = new ArrayList<>();
         for (TvInputs.Item in : TvInputs.load(this)) items.add(new MenuItem(in.label, () -> startSafely(in.intent)));
         if (items.isEmpty()) return;
-        View pill = pills[0];
+        View pill = pills[PILL_INPUTS];
         pill.getLocationInWindow(loc);
         showMenu(items, Math.min(loc[0], screenW - px(240 + 24)), loc[1] + Math.round(pill.getHeight() * PILL_SCALE) + px(10));
     }
@@ -1022,6 +1096,10 @@ public class MainActivity extends Activity {
     }
 
     private void showMenu(List<MenuItem> items, int x, int y) {
+        showMenu(items, x, y, 240);
+    }
+
+    private void showMenu(List<MenuItem> items, int x, int y, int widthDp) {
         menuItems.clear();
         menuItems.addAll(items);
         menuReturnSection = section;
@@ -1037,9 +1115,17 @@ public class MainActivity extends Activity {
             row.setSingleLine(true);
             row.setEllipsize(android.text.TextUtils.TruncateAt.END);
             row.setPadding(px(16), 0, px(16), 0);
+            if (item.icon != 0) {
+                Drawable d = getDrawable(item.icon).mutate();
+                d.setTint(item.iconColor);
+                d.setBounds(0, 0, px(20), px(20));
+                row.setCompoundDrawablesRelative(d, null, null, null);
+                row.setCompoundDrawablePadding(px(12));
+            }
             menu.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(46)));
         }
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) menu.getLayoutParams();
+        lp.width = px(widthDp);
         lp.leftMargin = x;
         lp.topMargin = y;
         menu.setLayoutParams(lp);
@@ -1163,19 +1249,16 @@ public class MainActivity extends Activity {
     private final Runnable netRecheck = this::updateNetwork;
 
     /** Wi-Fi pill: network name, icon and colour for connected / no internet / disconnected. */
+    /** Wi-Fi button: icon and colour show connected / no internet / disconnected. */
     private void updateNetwork() {
-        NetState s = NetState.read(this);
-        String label = s.pillLabel();
-        if (!label.contentEquals(pills[1].getText())) pills[1].setText(label);
-        if (s.state != netShown) {
-            netShown = s.state;
-            Drawable icon = getDrawable(s.icon()).mutate();
-            // Connected keeps the pill's normal white; problems are coloured.
-            int c = s.state == NetState.CONNECTED ? 0xE6FFFFFF : s.color();
-            icon.setTint(s.state == NetState.CONNECTED ? NetState.GREEN : c);
-            pills[1].setCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null);
-            pills[1].setTextColor(c);
+        NetState st = NetState.read(this);
+        if (st.state != netShown) {
+            netShown = st.state;
+            ImageView wifi = (ImageView) pills[PILL_WIFI];
+            wifi.setImageResource(st.icon());
+            wifi.setImageTintList(android.content.res.ColorStateList.valueOf(st.color()));
         }
+        pills[PILL_WIFI].setContentDescription(st.pillLabel());
         system.refreshNetwork();
         prayer.onNetworkAvailable();
     }
@@ -1269,7 +1352,10 @@ public class MainActivity extends Activity {
         updateNetwork();
         loadWallpaper();
         updateLive();
-        if (tilesDropped) {
+        if (appsLoaded && DockConfig.stamp(this) != dockStamp) {
+            tilesDropped = false;
+            loadApps(); // dock.txt changed (ADB push, another writer): never edit a stale dock
+        } else if (tilesDropped) {
             tilesDropped = false;
             loadApps(); // re-renders the tiles dropped by onTrimMemory
         }
@@ -1360,6 +1446,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         DockConfig.removeListener(dockChanged);
+        Alerts.get().removeListener(alertsChanged);
         unregisterReceiver(packageReceiver);
         worker.shutdownNow();
         super.onDestroy();

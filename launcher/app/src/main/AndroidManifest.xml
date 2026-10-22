@@ -6,6 +6,8 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Bell: Bluetooth devices connecting / disconnecting. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
     <!-- Phone remote: a foreground service keeps the HTTP server alive; the overlay permission
          shows the pairing PIN and lets it open apps while another app is on screen. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

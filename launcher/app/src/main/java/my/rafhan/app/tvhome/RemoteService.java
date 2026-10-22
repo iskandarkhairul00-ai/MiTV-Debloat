@@ -15,6 +15,7 @@ public class RemoteService extends Service {
     private static final String CHANNEL = "remote";
     private RemoteServer server;
     private NetBanner netBanner;
+    private AlertSources alertSources;
 
     @Override
     public void onCreate() {
@@ -31,6 +32,8 @@ public class RemoteService extends Service {
         server.start();
         netBanner = new NetBanner(this);
         netBanner.start();
+        alertSources = new AlertSources(this, netBanner);
+        alertSources.start();
     }
 
     @Override
@@ -48,6 +51,7 @@ public class RemoteService extends Service {
     public void onDestroy() {
         if (server != null) server.stop();
         if (netBanner != null) netBanner.stop();
+        if (alertSources != null) alertSources.stop();
         super.onDestroy();
     }
 

@@ -411,7 +411,12 @@ function renderApps() {
   if (editing) btn.className = "done";
   btn.onclick = async () => {
     buzz();
-    if (!editing) { dockEdit = dockPkgs.slice(); renderApps(); return; }
+    if (!editing) {
+      // Start from the TV's current dock, not the copy loaded when the tab opened (it may have
+      // been changed on the TV since; saving a stale copy would put the old dock back).
+      try { appsData = (await api("/api/apps")).apps; } catch (e) { flash(e.message); return; }
+      dockEdit = appsData.filter((a) => a.dock).map((a) => a.pkg); renderApps(); return;
+    }
     try { await post("/api/dock", { pkgs: dockEdit }); flash("Dock saved on the TV."); }
     catch (e) { flash(e.message); }
     dockEdit = null; loadApps();

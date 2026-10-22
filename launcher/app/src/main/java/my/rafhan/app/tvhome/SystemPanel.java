@@ -196,7 +196,10 @@ final class SystemPanel {
                 }
             }
         }
-        ip.set(addr != null ? addr : "—", "IP · " + (eth ? "LAN" : wifi ? "WI-FI" : "OFFLINE"),
+        // The Wi-Fi button is icon-only, so the network's name lives here.
+        NetState ns = NetState.read(ctx);
+        String where = eth ? "LAN" : wifi && ns.name != null ? ns.name : wifi ? "WI-FI" : "OFFLINE";
+        ip.set(addr != null ? addr : "—", "IP · " + where,
                 addr != null ? TEXT : WARN, -1);
 
         if (wifi) {

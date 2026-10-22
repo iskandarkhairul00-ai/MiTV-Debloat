@@ -1,0 +1,6 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFFFB340" />
+    <!-- dark rim separates it from the glass focus ring -->
+    <stroke android:width="2dp" android:color="#FF000000" />
+    <corners android:radius="10dp" />
+</shape>

@@ -122,9 +122,25 @@
             android:orientation="horizontal"
             android:padding="6dp">
 
-            <TextView android:id="@+id/pillInputs" android:text="@string/inputs" style="@style/Pill" />
-            <TextView android:id="@+id/pillWifi" android:text="@string/wifi" style="@style/Pill" />
-            <TextView android:id="@+id/pillSettings" android:text="@string/settings" style="@style/Pill" />
+            <!-- Bell (notifications) with an unread badge, then Inputs, Wi-Fi, Settings: icon only. -->
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <ImageView android:id="@+id/pillBell" style="@style/IconPill"
+                    android:layout_marginStart="0dp" android:contentDescription="Notifications"
+                    android:src="@drawable/ic_bell" />
+
+            </FrameLayout>
+
+            <ImageView android:id="@+id/pillInputs" style="@style/IconPill"
+                android:contentDescription="@string/inputs" android:src="@drawable/ic_input" />
+            <ImageView android:id="@+id/pillWifi" style="@style/IconPill"
+                android:contentDescription="@string/wifi" android:src="@drawable/ic_wifi" />
+            <ImageView android:id="@+id/pillSettings" style="@style/IconPill"
+                android:contentDescription="@string/settings" android:src="@drawable/ic_settings" />
         </LinearLayout>
 
         <!-- System stats card, filled by SystemPanel. -->
@@ -235,4 +251,21 @@
         android:id="@+id/highlight"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <!-- Bell unread badge: above the focus highlight so the glass ring never covers it; placed
+         on the bell's corner by MainActivity.placeBellBadge(). -->
+    <TextView
+        android:id="@+id/bellBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="20dp"
+        android:layout_gravity="top|start"
+        android:background="@drawable/badge_bg"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:minWidth="20dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:textColor="#FF000000"
+        android:textSize="11sp"
+        android:visibility="gone" />
 </FrameLayout>

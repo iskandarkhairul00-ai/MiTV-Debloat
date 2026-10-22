@@ -39,6 +39,12 @@ final class DockConfig {
         listeners.remove(l);
     }
 
+    /** Changes whenever dock.txt is written (by us, the phone, or an ADB push); 0 if absent. */
+    static long stamp(Context ctx) {
+        File f = file(ctx);
+        return f.isFile() ? f.lastModified() ^ f.length() : 0;
+    }
+
     private static File file(Context ctx) {
         return new File(ctx.getExternalFilesDir(null), "dock.txt");
     }

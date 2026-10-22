@@ -137,9 +137,24 @@ The top left shows the big clock with the date and Hijri date stacked beside it,
 - **Zone:** to use another zone, edit `prayer_zone` in `launcher/app/src/main/res/values/strings.xml` (e.g. `WLY01`, `JHR02`, see e-solat.gov.my), then run `scripts/build-and-install.sh`.
 - **Permission quirk:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
 
+### Notifications (bell)
+
+The top bar is four round icon buttons: **bell**, **Inputs**, **Wi-Fi**, **Settings**.
+- **Wi-Fi:** the button shows the connection state by its colour (green / amber / red). The network name is on the System card's IP line.
+- **Bell:** gets an amber count badge when something new arrives, an idea taken from [Matinee](https://github.com/Jarvis322/matinee). **OK** shows the newest 5. OK on one opens it and clears it, and **Clear all** empties the list.
+
+| Source | How it's detected | OK opens |
+|---|---|---|
+| Play Store updates | The Play Store's own "updates available" notifications (channels `updates-available` / `UPDATES`), read from `dumpsys notification` at start and every 6 h. Matinee uses a notification listener, which this TV refuses, so the launcher needs `DUMP` + `PACKAGE_USAGE_STATS`, granted by `build-and-install.sh`. | Play Store |
+| New HDMI device | HDMI-CEC devices (child inputs under an HDMI port) that appear after start-up. Needs a CEC-capable device. | That HDMI input |
+| Bluetooth | A device connecting, or staying disconnected for 2 min. The TV remote and quick reconnects are ignored. | Bluetooth settings |
+| Low memory | RAM use above 85 %, checked every minute while the screen is on. Re-arms below 80 %. | TV Manager |
+
+Device and memory alerts also slide in a short banner over any app. The list is kept in memory, so it starts empty after the launcher restarts.
+
 ### Connection indicator
 
-- **The Wi-Fi pill shows the state:**
+- **The Wi-Fi button shows the state** (icon only; the name is on the System card):
 
   | State | Icon | Text |
   |---|---|---|
@@ -316,7 +331,7 @@ Notes on the install:
 - It uses `cmd package set-home-activity`, because several apps claim HOME on this TV: the factory test, tvusage and FallbackHome.
 - While the stock launcher is enabled, it always wins (its priority is 2). That's why it has to be disabled.
 
-## Benchmark: this launcher vs the stock launcher (2026-10-21)
+## Benchmark: this launcher vs the stock launcher (2026-10-22)
 
 Measured with `scripts/benchmark.sh <home component> <label>`, using the optimised R8 release build. Conditions:
 - Nothing was playing, and USB debugging was on.
@@ -324,12 +339,12 @@ Measured with `scripts/benchmark.sh <home component> <label>`, using the optimis
 
 | | This launcher | Stock Android TV launcher |
 |---|---|---|
-| Memory, idle / after navigating (PSS) | **40 / 69 MB** | 91 / 125 MB |
-| CPU, idle, 60 s | 0.15 s | 0.13 s |
-| Cold start (process killed → first frame) | **0.50–0.57 s** | 0.68–0.75 s |
-| Back to home from an app (wait time) | 154–172 ms | 171–259 ms |
-| Janky frames while navigating | **6.2 % (35/569)** | 24.9 % (83/334) |
-| Frame time p50 / p90 / p99 | 7 / 8 / 57 ms | 5 / 22 / 48 ms |
+| Memory, idle, settled / after navigating (PSS) | **44 / 75 MB** | 94 / 124 MB |
+| CPU, idle, 60 s | 0.19 s | 0.14 s |
+| Cold start (process killed → first frame) | 0.60–1.05 s | 0.56–0.81 s |
+| Back to home from an app (wait time) | 233–308 ms | 214–284 ms |
+| Janky frames while navigating | **7.6 % (43/566)** | 18.9 % (62/328) |
+| Frame time p50 / p90 / p99 | 8 / **10** / 65 ms | 6 / 27 / 69 ms |
 | APK size | 0.5 MB | 12.7 MB |
 
 **Notes:**

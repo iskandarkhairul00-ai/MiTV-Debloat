@@ -14,4 +14,12 @@
         <item name="android:textColor">#E6FFFFFF</item>
         <item name="android:textSize">15sp</item>
     </style>
+    <!-- Round icon-only top-bar button (bell, Inputs, Wi-Fi, Settings). -->
+    <style name="IconPill">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:background">@drawable/pill_bg</item>
+        <item name="android:scaleType">center</item>
+    </style>
 </resources>

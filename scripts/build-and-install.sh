@@ -48,6 +48,9 @@ A shell settings put secure accessibility_enabled 1
 # Now Playing card: this low-RAM TV refuses notification-listener access, so without USB debugging
 # the card reads `dumpsys media_session`, which needs DUMP (a development permission).
 A shell pm grant $PKG android.permission.DUMP || true
+# Bell: reading the Play Store's update notifications from `dumpsys notification` also needs the
+# real PACKAGE_USAGE_STATS permission (the usage-access appop below isn't enough for that service).
+A shell pm grant $PKG android.permission.PACKAGE_USAGE_STATS || true
 
 # Several apps claim HOME on this TV (stock launcher, factory test, tvusage): pick ours explicitly.
 A shell cmd package set-home-activity $PKG/.MainActivity
