@@ -28,7 +28,8 @@ Use the answers instead of guessing. Ask again whenever something depends on my 
 
 Connect
 - `adb connect <TV IP>:5555`, then wait for me to accept the prompt on the TV. If it fails, check that USB debugging is on and that the TV and computer are on the same network. On macOS, the terminal app may need Local Network permission.
-- Put the TV address in one place (`scripts/env.sh`, overridable with `TV=ip:5555`) and have every script source it.
+- Put the TV address in one place (`scripts/env.sh`: `TV=<ip>` on the command line, remembered in a git-ignored `.tv` once the TV answers) and have every script source it.
+- Write the scripts in bash that runs on macOS, Linux and Windows (Git Bash): no macOS-only commands (find the JDK from `JAVA_HOME` or `java` on PATH; check for JDK 17+, `ANDROID_HOME`, adb and the TV's Android version up front, with clear errors), and a `.gitattributes` that keeps `*.sh` and `gradlew` in LF line endings. Record the TV's own HOME activity before replacing it, and have `--disable-stock` and the restore script use that, so it works on any brand.
 - Run one `pm` command per `adb shell` call. Chained `pm` commands in one shell can stop early on some firmware.
 - `adb install` waits for an on-screen confirmation on some sets. Push the APK to `/data/local/tmp` and run `pm install -r` instead.
 - Each `adb shell input keyevent` call can take seconds on a slow TV. Send several keys in one `input keyevent A B C` call.

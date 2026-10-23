@@ -1,0 +1,4 @@
+# Shell scripts must keep Unix line endings, or they fail under Git Bash on Windows
+# ("bad interpreter: /bin/bash^M").
+*.sh text eol=lf
+launcher/gradlew text eol=lf

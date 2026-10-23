@@ -4,6 +4,7 @@
 # so restore.sh can re-enable it. One pm call per adb shell call: chained pm commands can stop early.
 source "$(dirname "$0")/env.sh"
 LOG="$(dirname "$0")/../backup/disabled-by-us.txt"
+mkdir -p "$(dirname "$LOG")"
 for p in "$@"; do
   if ! A shell pm list packages "$p" | tr -d '\r' | grep -qx "package:$p"; then echo "skip (not installed): $p"; continue; fi
   out=$(A shell pm disable-user --user 0 "$p" 2>&1 | tr -d '\r')

@@ -1,39 +1,66 @@
 #!/bin/bash
-# Undo everything this project changed on the TV:
+# Undo everything this project changed on the TV (any brand), using what was recorded in backup/:
 #  - re-enables every package listed in backup/disabled-by-us.txt
-#  - lets background-restricted apps run in the background again, turns Wi-Fi scanning back on
-#  - turns Private DNS back to automatic
-#  - makes the stock Android TV launcher the home screen again (and optionally removes Apple-style launcher)
+#  - lets background-restricted apps run in the background again and puts Wi-Fi scanning back
+#    (only if those speed tweaks were made: backup/bg-restricted.txt, backup/speed-tweaks-before.txt)
+#  - puts Private DNS back as it was (only if it was changed: backup/private-dns-before.txt)
+#  - makes the TV's own launcher the home screen again (and optionally removes this launcher)
 # Usage: scripts/restore.sh [--remove-launcher]
 source "$(dirname "$0")/env.sh"
-LOG="$(dirname "$0")/../backup/disabled-by-us.txt"
+B="$ROOT/backup"
+PKG=my.rafhan.app.tvhome
 adb connect "$TV" >/dev/null
-if [ -f "$LOG" ]; then
+if [ -f "$B/disabled-by-us.txt" ]; then
   while read -r p; do
     [ -z "$p" ] && continue
     echo "$p -> $(A shell pm enable --user 0 "$p" 2>&1 | tr -d '\r')"
-  done < "$LOG"
+  done < "$B/disabled-by-us.txt"
 fi
 # Speed tweaks: background restrictions and Wi-Fi scanning.
-BG="$(dirname "$0")/../backup/bg-restricted.txt"
-if [ -f "$BG" ]; then
+if [ -f "$B/bg-restricted.txt" ]; then
   while read -r p; do
     [ -z "$p" ] && continue
     A shell cmd appops set "$p" RUN_ANY_IN_BACKGROUND allow
     A shell cmd appops set "$p" RUN_IN_BACKGROUND allow
     echo "$p -> background allowed"
-  done < "$BG"
+  done < "$B/bg-restricted.txt"
 fi
-A shell settings put global wifi_scan_always_enabled 1
+SCAN="$(sed -n 's/^wifi_scan_always_enabled=//p' "$B/speed-tweaks-before.txt" 2>/dev/null | tr -d '\r')"
+if [ -n "$SCAN" ] && [ "$SCAN" != "null" ]; then
+  A shell settings put global wifi_scan_always_enabled "$SCAN"
+fi
 # Phone remote: drop our accessibility service, keep the others (Button Mapper).
 CUR="$(A shell settings get secure enabled_accessibility_services | tr -d '\r')"
-NEW="$(echo "$CUR" | tr ':' '\n' | grep -v 'my.rafhan.app.tvhome/' | paste -sd: -)"
+NEW="$(echo "$CUR" | tr ':' '\n' | grep -v "$PKG/" | paste -sd: -)"
 if [ "$NEW" != "$CUR" ]; then
   if [ -n "$NEW" ]; then A shell settings put secure enabled_accessibility_services "$NEW"
   else A shell settings delete secure enabled_accessibility_services; fi
 fi
-A shell settings put global private_dns_mode opportunistic
-A shell settings delete global private_dns_specifier >/dev/null 2>&1
-A shell cmd package set-home-activity com.google.android.tvlauncher/.MainActivity
-if [ "$1" = "--remove-launcher" ]; then A shell pm uninstall my.rafhan.app.tvhome; fi
-echo "Done. Press Home on the remote (or reboot) to return to the stock launcher."
+# Private DNS, as recorded before it was changed ("before: <mode> / <specifier>").
+if [ -f "$B/private-dns-before.txt" ]; then
+  DNS="$(sed -n 's/^before: //p' "$B/private-dns-before.txt" | tr -d '\r')"
+  MODE="${DNS%% / *}"; SPEC="${DNS##* / }"
+  if [ -z "$MODE" ] || [ "$MODE" = "null" ]; then
+    A shell settings put global private_dns_mode opportunistic   # Android's default ("Automatic")
+  else
+    A shell settings put global private_dns_mode "$MODE"
+  fi
+  if [ -z "$SPEC" ] || [ "$SPEC" = "null" ]; then
+    A shell settings delete global private_dns_specifier >/dev/null 2>&1
+  else
+    A shell settings put global private_dns_specifier "$SPEC"
+  fi
+fi
+# Home screen: the TV's own launcher, as recorded by build-and-install.sh (older setups:
+# backup/home-default.txt). Unknown: let Android ask on the next Home press.
+STOCK=""
+if [ -s "$B/stock-home.txt" ]; then STOCK="$(tr -d '\r' < "$B/stock-home.txt")"
+elif [ -s "$B/home-default.txt" ]; then STOCK="$(tail -1 "$B/home-default.txt" | tr -d '\r')"
+fi
+if [ -n "$STOCK" ]; then
+  A shell cmd package set-home-activity "$STOCK"
+else
+  echo "note: the TV's own launcher wasn't recorded; press Home and pick it (or use --remove-launcher)."
+fi
+if [ "${1:-}" = "--remove-launcher" ]; then A shell pm uninstall "$PKG"; fi
+echo "Done. Press Home on the remote (or reboot) to return to the TV's own launcher."
