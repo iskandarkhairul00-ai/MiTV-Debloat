@@ -360,6 +360,14 @@ final class SettingsScreen {
         r.action = this::openZonePicker;
         out.add(r);
         out.add(toggle(LauncherSettings.SHOW_PRAYER, "Prayer card", "Today's five prayer times on the home screen"));
+        out.add(toggle(LauncherSettings.AZAN, "Azan", "Plays the azan and shows a banner at each prayer time, while the TV is on"));
+        out.add(choice(LauncherSettings.PRAYER_REMINDER, "Reminder before prayer",
+                "A banner over any app, without sound, while the TV is on",
+                new int[] {0, 5, 10, 15, 30}, new String[] {"Off", "5 min", "10 min", "15 min", "30 min"}));
+        Row test = new Row(ACTION, "Play azan now");
+        test.sub = "Hear it and check the volume";
+        test.action = LauncherSettings::playAzanNow;
+        out.add(test);
     }
 
     private void usageRows(List<Row> out) {

@@ -16,6 +16,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
     private RemoteServer server;
     private NetBanner netBanner;
     private AlertSources alertSources;
+    private Azan azan;
 
     @Override
     public void onCreate() {
@@ -30,6 +31,8 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         netBanner.start();
         alertSources = new AlertSources(this, netBanner);
         alertSources.start();
+        azan = new Azan(this, netBanner);
+        azan.start();
     }
 
     private Notification notification() {
@@ -75,6 +78,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         if (server != null) server.stop();
         if (netBanner != null) netBanner.stop();
         if (alertSources != null) alertSources.stop();
+        if (azan != null) azan.stop();
         super.onDestroy();
     }
 

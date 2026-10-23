@@ -23,7 +23,9 @@ final class LauncherSettings {
             USAGE_EXCLUDED = "usage_excluded", WALL_DIM = "wallpaper_dim",
             ALERT_PLAY = "alert_play", ALERT_HDMI = "alert_hdmi", ALERT_BT = "alert_bluetooth",
             ALERT_MEMORY = "alert_memory", MEMORY_LEVEL = "memory_level", NET_BANNER = "net_banner",
-            REMOTE = "remote_on", WALLPAPER = "wallpaper", WEEK_START = "week_start";
+            REMOTE = "remote_on", WALLPAPER = "wallpaper", WEEK_START = "week_start",
+            AZAN = "azan", AZAN_TEST = "azan_test",
+            PRAYER_REMINDER = "prayer_reminder";
 
     /** Clock format: follow the TV, or force one. */
     static final int CLOCK_AUTO = 0, CLOCK_12 = 1, CLOCK_24 = 2;
@@ -49,6 +51,11 @@ final class LauncherSettings {
 
     private static SharedPreferences prefs(Context ctx) {
         return ctx.getSharedPreferences("settings", Context.MODE_PRIVATE);
+    }
+
+    /** Not a stored setting: tells listeners (the azan in RemoteService) to play once now. */
+    static void playAzanNow() {
+        changed(AZAN_TEST);
     }
 
     private static void changed(String key) {
@@ -80,6 +87,7 @@ final class LauncherSettings {
             case WALL_DIM: return 2;      // Medium: the old fixed scrim
             case MEMORY_LEVEL: return 85; // %
             case WEEK_START: return 1;    // DayOfWeek: 1 = Monday, 7 = Sunday
+            case PRAYER_REMINDER: return 5; // minutes before each prayer; 0 = off
             default: return 0;
         }
     }

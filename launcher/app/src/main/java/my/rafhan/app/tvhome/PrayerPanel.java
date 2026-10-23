@@ -42,7 +42,7 @@ final class PrayerPanel {
     private static final String API =
             "https://www.e-solat.gov.my/index.php?r=esolatApi/takwimsolat&period=month&zone=";
     private static final String[] KEYS = {"fajr", "dhuhr", "asr", "maghrib", "isha"};
-    private static final String[] NAMES = {"Fajr", "Dhuhr", "Asr", "Maghrib", "Isya"};
+    static final String[] NAMES = {"Fajr", "Dhuhr", "Asr", "Maghrib", "Isya"};
     private static final String[] HIJRI_MONTHS = {"Muharam", "Safar", "Rabiulawal", "Rabiulakhir",
             "Jamadilawal", "Jamadilakhir", "Rejab", "Syaaban", "Ramadan", "Syawal", "Zulkaedah", "Zulhijjah"};
     // e-solat dates use Malay month abbreviations: "20-Okt-2026".
@@ -228,6 +228,32 @@ final class PrayerPanel {
 
     private File cacheFile(String z, YearMonth ym) {
         return new File(ctx.getFilesDir(), "prayer-" + z + "-" + ym + ".json");
+    }
+
+    /**
+     * Today's five times (Fajr..Isya) for {@code zone} from the month cache this card keeps, for
+     * the azan in RemoteService; null if that month isn't cached yet. Blocking (file read).
+     */
+    static LocalTime[] cachedTimes(Context ctx, String zone, LocalDate date) {
+        File f = new File(ctx.getFilesDir(), "prayer-" + zone + "-" + YearMonth.from(date) + ".json");
+        if (!f.isFile()) return null;
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            StringBuilder sb = new StringBuilder();
+            for (String line; (line = r.readLine()) != null; ) sb.append(line);
+            JSONArray month = new JSONArray(sb.toString());
+            for (int i = 0; i < month.length(); i++) {
+                JSONObject o = month.optJSONObject(i);
+                String d = o == null ? "" : o.optString("date"); // e.g. "20-Okt-2026"
+                if (d.length() >= 2 && TextUtils.isDigitsOnly(d.substring(0, 2))
+                        && Integer.parseInt(d.substring(0, 2)) == date.getDayOfMonth()) {
+                    LocalTime[] t = new LocalTime[KEYS.length];
+                    for (int k = 0; k < KEYS.length; k++) t[k] = parse(o.optString(KEYS[k]));
+                    return t;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private JSONArray readCache(YearMonth ym) {

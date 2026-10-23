@@ -8,7 +8,7 @@ Done on 2026-10-20. Every step was checked with screenshots pulled from the TV (
 <table>
   <tr>
     <th width="50%">Before: stock Android TV home</th>
-    <th width="50%">After: this launcher (v1.2)</th>
+    <th width="50%">After: this launcher (v1.5)</th>
   </tr>
   <tr>
     <td width="50%"><img src="docs/launcher-old.jpg" width="100%" alt="Stock Android TV home screen with Favorite Apps, Play Next and AirConsole rows"></td>
@@ -43,7 +43,7 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
   </tr>
   <tr>
     <td valign="top"><b>Running apps</b> (Up from the top bar): what's running, how much memory each app uses and what it's doing. OK force-closes; hold OK to hide an app from the list.</td>
-    <td valign="top"><b>Settings</b> (the gear): prayer zone (all 60 JAKIM zones), which cards show, 12/24-hour clock, wallpaper, what the bell tells you, the phone remote, and more. Changes apply straight away.</td>
+    <td valign="top"><b>Settings</b> (the gear): prayer zone (all 60 JAKIM zones), azan and prayer reminders, which cards show, 12/24-hour clock, wallpaper, the Most used week, what the bell tells you, the phone remote, and more. Changes apply straight away.</td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/dock-reorder.jpg" width="100%" alt="Hold OK on a dock app: Move, Remove from dock, Open"></td>
@@ -58,6 +58,7 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
     <td width="50%" valign="top">
       <b>Also:</b>
       <ul>
+        <li><b>Azan</b> at each prayer time with a banner over any app, plus a silent reminder a few minutes before (you choose how early).</li>
         <li><b>Wallpapers</b>: seven photos from Wikimedia Commons, previewed as you move through the list, plus your own pictures from a <code>Wallpapers</code> folder.</li>
         <li><b>Notifications bell</b>: Play Store updates, new HDMI devices, Bluetooth devices and low memory.</li>
         <li><b>Connection banner</b> over any app when Wi-Fi drops or loses internet.</li>
@@ -200,6 +201,7 @@ adb shell settings put global private_dns_mode opportunistic
 The top left shows the big clock with the date and Hijri date stacked beside it, level with the pills. Below it, the prayer card's top lines up with the system card's. It shows today's Fajr, Dhuhr, Asr, Maghrib and Isya from JAKIM e-solat. The next prayer is in gold, with a countdown in the card's header. After Isya it shows tomorrow's Fajr.
 
 - **Fetching:** the whole month is fetched once from `esolatApi/takwimsolat&period=month&zone=SGR03` and cached on the TV. It's fetched again only when the month changes. If there's no network, it retries when the network comes back, at most once a minute. The display updates on the clock's minute tick.
+- **Azan:** at each of the five prayer times the launcher plays the azan (`res/raw/azan.mp3`, bundled in the APK) and slides in a banner like "Azan Maghrib · 19:01" over any app, like the Wi-Fi banner. Apps that support it (Netflix, YouTube) pause and resume afterwards. It only plays while the screen is on and within 2 minutes of the time, and not until the clock is set after a power cut. Switch it off in **Settings → Prayer times → Azan**; **Play azan now** plays it straight away to check the volume. A silent reminder banner ("Maghrib in 5 min · 19:01") also comes before each prayer; set how early (Off, 5, 10, 15 or 30 min) in **Settings → Prayer times → Reminder before prayer**. To use another recording, replace `azan.mp3` and rebuild.
 - **Zone:** pick it in **Settings → Prayer times → Zone** (all 60 JAKIM zones, from e-solat.gov.my). The card switches straight away and fetches that zone's month. `prayer_zone` in strings.xml is only the default.
 - **Permission quirk:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
 
@@ -264,7 +266,7 @@ The gear at the end of the top bar opens the launcher's Settings: categories on 
 | Category | Options |
 |---|---|
 | Home screen | Clock Auto / 12-hour / 24-hour, System card, Now Playing card, wallpaper dim (Off/Low/Medium/High), wallpaper (seven built-in photos, your pictures or none). A hidden card's column closes up. |
-| Prayer times | Zone (picker), prayer card on/off |
+| Prayer times | Zone (picker), prayer card on/off, azan on/off, reminder before prayer (Off / 5 / 10 / 15 / 30 min), play azan now |
 | Most used | Most used card on/off, week starts on (Monday / Sunday), leave out (app picker) |
 | Notifications | Play Store updates, new HDMI devices, Bluetooth, low memory (each on/off), low-memory level 80/85/90 %, connection banner |
 | Phone remote | Remote on/off (the banner and bell keep working when it's off), its address, forget all paired phones (press OK twice) |
