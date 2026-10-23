@@ -170,6 +170,8 @@ public class MainActivity extends Activity {
     private boolean tilesDropped;
     private long wallpaperStamp = -1;
     private boolean wallpaperFetching;
+    private long bingAttemptAt;                 // throttle Bing refresh retries (e.g. offline)
+    private java.time.LocalDate lastWallpaperDay; // reload the wallpaper after midnight (Bing daily)
     // Settings → Wallpaper list: the focused wallpaper, shown but not saved (null: the saved one).
     private String wallpaperPreview;
     private int wallpaperGen;
@@ -651,8 +653,7 @@ public class MainActivity extends Activity {
         // Settings (gear) fades in over home.
         if ((oldSection == SETTINGS) != (newSection == SETTINGS)) {
             boolean open = newSection == SETTINGS;
-            page.animate().alpha(open ? 0f : 1f).setDuration(220).start();
-            bellBadge.animate().alpha(open ? 0f : 1f).setDuration(220).start();
+            page.animate().alpha(open ? 0f : 1f).setDuration(220).start(); // bell badge follows
             settingsPage.animate().cancel();
             if (open) {
                 settingsPage.setAlpha(0f);
@@ -1144,7 +1145,9 @@ public class MainActivity extends Activity {
         float x = right - bellBadge.getWidth() + px(6), y = top - px(6);
         if (bellBadge.getTranslationX() != x) bellBadge.setTranslationX(x);
         if (bellBadge.getTranslationY() != y) bellBadge.setTranslationY(y);
-        float a = findViewById(R.id.pills).getAlpha();
+        // The badge sits outside the home page (so the glass ring never covers it), so it fades
+        // with both the top bar and the page around it (grid, Settings).
+        float a = page.getAlpha() * findViewById(R.id.pills).getAlpha();
         if (bellBadge.getAlpha() != a) bellBadge.setAlpha(a);
     }
 
@@ -1479,6 +1482,12 @@ public class MainActivity extends Activity {
         clock.setText(DateFormat.format(LauncherSettings.use24h(this) ? "HH:mm" : "h:mm", c));
         date.setText(DateFormat.format("EEEE, d MMMM yyyy", c));
         prayer.refresh();
+        // After midnight, pick up the new Bing photo of the day even if left on the home screen.
+        java.time.LocalDate day = java.time.LocalDate.now();
+        if (!day.equals(lastWallpaperDay)) {
+            lastWallpaperDay = day;
+            loadWallpaper();
+        }
     }
 
     private int netShown = -1;
@@ -1516,6 +1525,20 @@ public class MainActivity extends Activity {
     private void loadWallpaper() {
         String choice = wallpaperPreview != null ? wallpaperPreview : LauncherSettings.wallpaper(this);
         File found = Wallpapers.file(this, choice);
+        // Bing "photo of the day": refresh at most once a day (and no more than once a minute
+        // when it keeps failing, e.g. offline); a new day's picture then swaps in via the stamp.
+        if (Wallpapers.BING.equals(choice) && Bing.due(this) && !wallpaperFetching
+                && System.currentTimeMillis() - bingAttemptAt > 60_000) {
+            wallpaperFetching = true;
+            bingAttemptAt = System.currentTimeMillis();
+            new Thread(() -> {
+                boolean ok = Bing.refresh(this);
+                main.post(() -> {
+                    wallpaperFetching = false;
+                    if (ok) loadWallpaper();
+                });
+            }, "bing-fetch").start();
+        }
         // Previewing one that's still downloading: keep what's showing until it lands.
         if (found == null && wallpaperPreview != null && !Wallpapers.NONE.equals(choice)) return;
         if (found == null && Wallpapers.photo(choice) != null && !wallpaperFetching) {

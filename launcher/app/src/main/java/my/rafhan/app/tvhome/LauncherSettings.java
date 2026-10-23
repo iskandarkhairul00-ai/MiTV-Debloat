@@ -110,7 +110,8 @@ final class LauncherSettings {
     static String wallpaper(Context ctx) {
         String w = prefs(ctx).getString(WALLPAPER, null);
         // A built-in that was replaced in an update falls back to the default.
-        if (w != null && (w.equals(Wallpapers.NONE) || w.equals(Wallpapers.CUSTOM) || Wallpapers.photo(w) != null
+        if (w != null && (w.equals(Wallpapers.NONE) || w.equals(Wallpapers.CUSTOM) || w.equals(Wallpapers.BING)
+                || Wallpapers.photo(w) != null
                 || (w.startsWith(Wallpapers.FILE) && Wallpapers.file(ctx, w) != null))) {
             return w; // a picture deleted from the Wallpapers folder falls back too
         }

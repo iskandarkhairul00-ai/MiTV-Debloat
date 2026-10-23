@@ -22,7 +22,8 @@ import java.util.Locale;
  * files/wallpaper.{jpg,png,webp} is still offered as "Your picture".
  */
 final class Wallpapers {
-    static final String NONE = "none", CUSTOM = "custom", FILE = "file:", DEFAULT = "perseids"; // Stargazer, the first in the list
+    static final String NONE = "none", CUSTOM = "custom", FILE = "file:", BING = "bing",
+            DEFAULT = "perseids"; // Stargazer, the first in the list
     private static final String UA = "TvHome/1.0 (Android TV home launcher)";
     private static final String COMMONS = "https://thumb.wikimedia.org/wikipedia/commons/thumb/";
 
@@ -109,6 +110,7 @@ final class Wallpapers {
     /** The file for a wallpaper choice, or null (none, not downloaded yet, no pushed picture). */
     static File file(Context ctx, String choice) {
         if (CUSTOM.equals(choice)) return custom(ctx);
+        if (BING.equals(choice)) return Bing.shown(ctx);
         if (choice.startsWith(FILE)) {
             String name = choice.substring(FILE.length());
             File f = new File(folder(), name);

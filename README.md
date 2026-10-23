@@ -209,11 +209,11 @@ The top left shows the big clock with the date and Hijri date stacked beside it,
 
 The top bar is four round icon buttons: **bell**, **Inputs**, **Wi-Fi**, **Settings**.
 - **Wi-Fi:** the button shows the connection state by its colour (green / amber / red). The network name is on the System card's IP line.
-- **Bell:** gets an amber count badge when something new arrives, an idea taken from [Matinee](https://github.com/Jarvis322/matinee). **OK** shows the newest 5. OK on one opens it and clears it, and **Clear all** empties the list.
+- **Bell:** gets an amber count badge when something new arrives. **OK** shows the newest 5. OK on one opens it and clears it, and **Clear all** empties the list.
 
 | Source | How it's detected | OK opens |
 |---|---|---|
-| Play Store updates | The Play Store's own "updates available" notifications (channels `updates-available` / `UPDATES`), read from `dumpsys notification` at start and every 6 h. Matinee uses a notification listener, which this TV refuses, so the launcher needs `DUMP` + `PACKAGE_USAGE_STATS`, granted by `build-and-install.sh`. | Play Store |
+| Play Store updates | The Play Store's own "updates available" notifications (channels `updates-available` / `UPDATES`), read from `dumpsys notification` at start and every 6 h. A notification listener, which this TV refuses, would be the usual way, so the launcher needs `DUMP` + `PACKAGE_USAGE_STATS` instead, granted by `build-and-install.sh`. | Play Store |
 | New HDMI device | HDMI-CEC devices (child inputs under an HDMI port) that appear after start-up. Needs a CEC-capable device. | That HDMI input |
 | Bluetooth | A device connecting, or staying disconnected for 2 min. The TV remote and quick reconnects are ignored. | Bluetooth settings |
 | Low memory | RAM use above 85 %, checked every minute while the screen is on. Re-arms below 80 %. | TV Manager |
@@ -261,11 +261,11 @@ Press **Up** on the top bar and the home screen slides away. A screen with three
 
 ### Settings (gear)
 
-The gear at the end of the top bar opens the launcher's Settings: categories on the left, their options on the right (laid out like [Matinee](https://github.com/Jarvis322/matinee)'s). Left/Right switch sides, OK changes the focused option (switches flip, choices cycle, ›-rows open a list), Back steps out (list → options → categories → home). Changes apply straight away and are kept in the launcher's `settings` prefs. Everything starts as the launcher behaved before Settings existed.
+The gear at the end of the top bar opens the launcher's Settings: categories on the left, their options on the right. Left/Right switch sides, OK changes the focused option (switches flip, choices cycle, ›-rows open a list), Back steps out (list → options → categories → home). Changes apply straight away and are kept in the launcher's `settings` prefs. Everything starts as the launcher behaved before Settings existed.
 
 | Category | Options |
 |---|---|
-| Home screen | Clock Auto / 12-hour / 24-hour, System card, Now Playing card, wallpaper dim (Off/Low/Medium/High), wallpaper (seven built-in photos, your pictures or none). A hidden card's column closes up. |
+| Home screen | Clock Auto / 12-hour / 24-hour, System card, Now Playing card, wallpaper dim (Off/Low/Medium/High), wallpaper (Bing daily photo, seven built-in photos, your pictures or none). A hidden card's column closes up. |
 | Prayer times | Zone (picker), prayer card on/off, azan on/off, reminder before prayer (Off / 5 / 10 / 15 / 30 min), play azan now |
 | Most used | Most used card on/off, week starts on (Monday / Sunday), leave out (app picker) |
 | Notifications | Play Store updates, new HDMI devices, Bluetooth, low memory (each on/off), low-memory level 80/85/90 %, connection banner |
@@ -399,7 +399,10 @@ The dock holds **up to 5 apps**, in any order.
 
 ### Change the wallpaper
 
-**Settings → Home screen → Wallpaper** offers seven photos (lakes, landscapes, forest, night sky and a galaxy), **Your picture** (if you pushed one) and **None**. The photos aren't in the APK. The TV downloads each one once (1920 px, 0.5–1 MB) from Wikimedia Commons and keeps it in the launcher's storage:
+**Settings → Home screen → Wallpaper** offers **Bing wallpaper of the day**, seven built-in photos (lakes, landscapes, forest, night sky and a galaxy), **Your picture** (if you pushed one) and **None**.
+
+- **Bing wallpaper of the day** changes by itself every day. It pulls Bing's daily photo from `bing.com`'s public feed (`HPImageArchive.aspx`), keeping the last 7 days cached (~0.3 MB each) and showing today's; the picker sub-line names the place. Only scenic pictures are kept — any whose caption names people, or where a face is detected (Android's built-in `FaceDetector`), is skipped, so there are no people or faces. A new day's photo is fetched once per day, and offline it keeps showing the last one.
+ The photos aren't in the APK. The TV downloads each one once (1920 px, 0.5–1 MB) from Wikimedia Commons and keeps it in the launcher's storage:
 - the default (Stargazer, the first in the list) on first start;
 - the rest when you first open the Wallpaper list, where their thumbnails appear as they land.
 

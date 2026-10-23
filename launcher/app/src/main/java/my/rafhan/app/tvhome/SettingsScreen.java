@@ -391,7 +391,7 @@ final class SettingsScreen {
         out.add(choice(LauncherSettings.WALL_DIM, "Wallpaper dim", "How dark the wallpaper is behind the cards",
                 new int[] {0, 1, 2, 3}, new String[] {"Off", "Low", "Medium", "High"}));
         Row w = new Row(PICKER, "Wallpaper");
-        w.sub = "Seven photos, or your own: phone remote → Files → Wallpapers";
+        w.sub = "Bing photo of the day, built-in photos or your own";
         String name = wallpaperName(LauncherSettings.wallpaper(ctx));
         w.value = () -> name;
         w.action = this::openWallpaperPicker;
@@ -400,6 +400,7 @@ final class SettingsScreen {
 
     private String wallpaperName(String choice) {
         if (Wallpapers.CUSTOM.equals(choice)) return "Your picture";
+        if (Wallpapers.BING.equals(choice)) return "Bing daily";
         if (choice.startsWith(Wallpapers.FILE)) return baseName(choice.substring(Wallpapers.FILE.length()));
         Wallpapers.Photo p = Wallpapers.photo(choice);
         return p != null ? p.name : "None";
@@ -523,6 +524,17 @@ final class SettingsScreen {
         none.id = Wallpapers.NONE;
         none.action = () -> pickWallpaper(Wallpapers.NONE);
         items.add(none);
+        File bingFile = Bing.shown(ctx);
+        Row bing = new Row(CHECK, "Bing wallpaper of the day");
+        String cap = Bing.caption(ctx);
+        bing.sub = bingFile != null && !cap.isEmpty() ? cap + " · bing.com"
+                : "A new photo every day · bing.com";
+        bing.thumbSlot = true;
+        bing.thumb = bingFile != null ? thumbs.get(thumbKey(bingFile)) : null;
+        bing.checked = Wallpapers.BING.equals(current);
+        bing.id = Wallpapers.BING;
+        bing.action = () -> pickWallpaper(Wallpapers.BING);
+        items.add(bing);
         for (Wallpapers.Photo p : Wallpapers.BUILT_IN) {
             Row r = new Row(CHECK, p.name);
             boolean cached = Wallpapers.isCached(ctx, p.id);
@@ -590,6 +602,18 @@ final class SettingsScreen {
         fetchingWallpapers = true;
         failed.clear();
         new Thread(() -> {
+            if (Bing.due(ctx)) Bing.refresh(ctx);
+            File bf = Bing.shown(ctx);
+            if (bf != null) {
+                String key = thumbKey(bf);
+                if (!thumbs.containsKey(key)) {
+                    Bitmap t = thumbnail(bf);
+                    main.post(() -> {
+                        if (t != null) thumbs.put(key, t);
+                        refreshWallpaperRows();
+                    });
+                }
+            }
             List<String> ids = new ArrayList<>();
             for (Wallpapers.Photo p : Wallpapers.BUILT_IN) ids.add(p.id);
             for (File f : Wallpapers.userPictures()) {
