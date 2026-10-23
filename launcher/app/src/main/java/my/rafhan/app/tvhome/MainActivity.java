@@ -209,6 +209,22 @@ public class MainActivity extends Activity {
         }
     };
 
+    /** Same proportions on every TV: the screen is treated as 960 x 540 dp (see UiScale). */
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        applyOverrideConfiguration(UiScale.config(base));
+    }
+
+    /** The screen's size or density changed (e.g. another resolution): lay out again for it. */
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (UiScale.config(getApplicationContext()).densityDpi != getResources().getConfiguration().densityDpi) {
+            recreate();
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

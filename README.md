@@ -193,6 +193,7 @@ adb shell settings put global private_dns_mode opportunistic
   - Back returns to the dock.
   - Home while already home jumps back to the dock.
 - **Focus memory:** the last focused tile is remembered, even if the TV kills the launcher.
+- **Any screen size:** the layout is designed for 960 × 540 dp (1920 × 1080 at density 320). On other TVs the launcher picks the density that keeps those proportions, so a 720p box or a denser screen shows the same layout scaled to fit, not shrunk or overlapping (`UiScale.java`).
 - **Resource use:** about 45–75 MB of memory (see the benchmark). There is no blur, video or network polling; the clock updates from the system's minute tick.
 - **New apps:** they appear automatically; the grid lists your most used apps first, then the rest A–Z.
 
