@@ -42,13 +42,13 @@ final class SettingsScreen {
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, GREEN = 0xFF34C759, AMBER = 0xFFFFB340;
     private static final int TOGGLE = 0, CHOICE = 1, PICKER = 2, ACTION = 3, INFO = 4, CHECK = 5;
 
-    private static final int HOME = 0, PRAYER = 1, ALERTS = 2, REMOTE = 3, HIDDEN = 4; // About: 5
-    private static final String[] CATS = {"Home screen", "Prayer times", "Notifications", "Phone remote",
-            "Running apps", "About"};
+    private static final int HOME = 0, PRAYER = 1, USAGE = 2, ALERTS = 3, REMOTE = 4, HIDDEN = 5; // About: 6
+    private static final String[] CATS = {"Home screen", "Prayer times", "Most used", "Notifications",
+            "Phone remote", "Running apps", "About"};
     private static final String[] CAT_SUBS = {"Cards, clock and wallpaper", "Zone and card",
-            "What the bell tells you", "Control the TV from your phone", "Apps hidden from the list",
+            "Your top apps this week", "What the bell tells you", "Control the TV from your phone", "Apps hidden from the list",
             "Version and TV settings"};
-    private static final int[] CAT_ICONS = {R.drawable.ic_tv, R.drawable.ic_crescent, R.drawable.ic_bell,
+    private static final int[] CAT_ICONS = {R.drawable.ic_tv, R.drawable.ic_crescent, R.drawable.ic_chart, R.drawable.ic_bell,
             R.drawable.ic_phone, R.drawable.ic_ram, R.drawable.ic_info};
     private static final String LIVE_TV = "com.mediatek.wwtv.tvcenter";
 
@@ -89,7 +89,7 @@ final class SettingsScreen {
     private final List<View> catViews = new ArrayList<>();
     private final List<View> rowViews = new ArrayList<>();
     private final LinearLayout rowList;
-    private final ScrollView scroll;
+    private final ScrollView scroll, catScroll;
     private final TextView crumb, paneTitle, paneSub;
 
     private int col, cat, row;
@@ -139,7 +139,15 @@ final class SettingsScreen {
         // Left: categories.
         LinearLayout cats = new LinearLayout(ctx);
         cats.setOrientation(LinearLayout.VERTICAL);
-        body.addView(cats, new LinearLayout.LayoutParams(px(290), ViewGroup.LayoutParams.MATCH_PARENT));
+        // Scrolls when the screen is too short for every category (720p sets at a low density).
+        catScroll = new ScrollView(ctx);
+        catScroll.setVerticalScrollBarEnabled(false);
+        catScroll.setFocusable(false);
+        catScroll.setVerticalFadingEdgeEnabled(true);
+        catScroll.setFadingEdgeLength(px(24));
+        catScroll.addView(cats, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(catScroll, new LinearLayout.LayoutParams(px(290), ViewGroup.LayoutParams.MATCH_PARENT));
         for (int i = 0; i < CATS.length; i++) {
             LinearLayout c = new LinearLayout(ctx);
             c.setGravity(Gravity.CENTER_VERTICAL);
@@ -334,6 +342,7 @@ final class SettingsScreen {
         switch (c) {
             case HOME: homeRows(out); break;
             case PRAYER: prayerRows(out); break;
+            case USAGE: usageRows(out); break;
             case ALERTS: alertRows(out); break;
             case REMOTE: remoteRows(out); break;
             case HIDDEN: hiddenRows(out); break;
@@ -353,17 +362,22 @@ final class SettingsScreen {
         out.add(toggle(LauncherSettings.SHOW_PRAYER, "Prayer card", "Today's five prayer times on the home screen"));
     }
 
-    private void homeRows(List<Row> out) {
-        out.add(choice(LauncherSettings.CLOCK, "Clock", "Auto follows the TV's own setting",
-                new int[] {LauncherSettings.CLOCK_AUTO, LauncherSettings.CLOCK_12, LauncherSettings.CLOCK_24},
-                new String[] {"Auto", "12-hour", "24-hour"}));
-        out.add(toggle(LauncherSettings.SHOW_USAGE, "Most used card", "Your top apps over the last 7 days"));
-        Row ex = new Row(PICKER, "Most used: leave out");
+    private void usageRows(List<Row> out) {
+        out.add(toggle(LauncherSettings.SHOW_USAGE, "Most used card", "Your top 5 apps this week on the home screen"));
+        out.add(choice(LauncherSettings.WEEK_START, "Week starts on", "Counts from this day up to today",
+                new int[] {1, 7}, new String[] {"Monday", "Sunday"}));
+        Row ex = new Row(PICKER, "Leave out");
         ex.sub = "Apps that don't count, like Live TV (it's only the HDMI and antenna screen)";
         int n = LauncherSettings.usageExcluded(ctx).size();
         ex.value = () -> n == 1 ? "1 app" : n + " apps";
         ex.action = this::openUsagePicker;
         out.add(ex);
+    }
+
+    private void homeRows(List<Row> out) {
+        out.add(choice(LauncherSettings.CLOCK, "Clock", "Auto follows the TV's own setting",
+                new int[] {LauncherSettings.CLOCK_AUTO, LauncherSettings.CLOCK_12, LauncherSettings.CLOCK_24},
+                new String[] {"Auto", "12-hour", "24-hour"}));
         out.add(toggle(LauncherSettings.SHOW_SYSTEM, "System card", "CPU, RAM, storage, network and USB debugging"));
         out.add(toggle(LauncherSettings.SHOW_NOW, "Now Playing card", "Cover, title and controls while something plays"));
         out.add(choice(LauncherSettings.WALL_DIM, "Wallpaper dim", "How dark the wallpaper is behind the cards",
@@ -622,7 +636,7 @@ final class SettingsScreen {
         worker.execute(() -> {
             List<AppEntry> apps = AppRepository.load(ctx);
             main.post(() -> {
-                if (col != 1 || cat != HOME || picker != null || row != from) return; // moved on meanwhile
+                if (col != 1 || cat != USAGE || picker != null || row != from) return; // moved on meanwhile
                 List<Row> items = new ArrayList<>();
                 List<String> seen = new ArrayList<>();
                 for (AppEntry a : apps) {
@@ -639,7 +653,7 @@ final class SettingsScreen {
                 }
                 // Apps already left out first (Live TV), then A–Z.
                 items.sort((x, y) -> x.checked != y.checked ? (x.checked ? -1 : 1) : x.label.compareToIgnoreCase(y.label));
-                openPicker("Most used: leave out", items, 0);
+                openPicker("Leave out", items, 0);
             });
         });
     }
@@ -652,6 +666,8 @@ final class SettingsScreen {
             // The open category stays marked while its rows have focus.
             catViews.get(i).setBackgroundResource(i == cat && col == 1 ? R.drawable.row_selected : 0);
         }
+        View c = catViews.get(cat);
+        catScroll.post(() -> catScroll.smoothScrollTo(0, Math.max(0, c.getTop() - px(54))));
         crumb.setText("/  " + CATS[cat] + (picker != null ? "  /  " + pickerTitle : ""));
         paneTitle.setText(picker != null ? pickerTitle : CATS[cat]);
         paneSub.setText(inWallpaperList() ? "Move to preview  ·  OK to set"

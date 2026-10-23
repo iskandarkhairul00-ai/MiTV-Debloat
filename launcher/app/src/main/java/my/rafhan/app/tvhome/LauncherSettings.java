@@ -23,7 +23,7 @@ final class LauncherSettings {
             USAGE_EXCLUDED = "usage_excluded", WALL_DIM = "wallpaper_dim",
             ALERT_PLAY = "alert_play", ALERT_HDMI = "alert_hdmi", ALERT_BT = "alert_bluetooth",
             ALERT_MEMORY = "alert_memory", MEMORY_LEVEL = "memory_level", NET_BANNER = "net_banner",
-            REMOTE = "remote_on", WALLPAPER = "wallpaper";
+            REMOTE = "remote_on", WALLPAPER = "wallpaper", WEEK_START = "week_start";
 
     /** Clock format: follow the TV, or force one. */
     static final int CLOCK_AUTO = 0, CLOCK_12 = 1, CLOCK_24 = 2;
@@ -79,6 +79,7 @@ final class LauncherSettings {
         switch (key) {
             case WALL_DIM: return 2;      // Medium: the old fixed scrim
             case MEMORY_LEVEL: return 85; // %
+            case WEEK_START: return 1;    // DayOfWeek: 1 = Monday, 7 = Sunday
             default: return 0;
         }
     }

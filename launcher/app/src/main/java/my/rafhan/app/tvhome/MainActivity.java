@@ -1352,6 +1352,7 @@ public class MainActivity extends Activity {
                 loadWallpaper();
                 break;
             case LauncherSettings.USAGE_EXCLUDED:
+            case LauncherSettings.WEEK_START:
                 refreshUsage();
                 break;
             default:

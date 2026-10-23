@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * "Most used" card: the top apps over the last 7 days, from UsageStatsManager.
+ * "Most used" card: the top apps this week (Monday or Sunday start, Settings), from UsageScores.
  *
  * Needs Usage access: build-and-install.sh grants it with
  * {@code appops set my.rafhan.app.tvhome GET_USAGE_STATS allow}.
@@ -56,7 +56,7 @@ final class UsagePanel {
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(px(12), px(12));
         ilp.setMarginEnd(px(5));
         header.addView(icon, ilp);
-        header.addView(small("MOST USED · 7 DAYS", DIM, 10.5f));
+        header.addView(small("MOST USED · THIS WEEK", DIM, 10.5f));
         total = small("", DIM, 10.5f);
         total.setGravity(Gravity.END);
         header.addView(total, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -129,7 +129,7 @@ final class UsagePanel {
             if (s >= 60_000) ranked.add(e);
         }
         if (ranked.isEmpty()) {
-            showMessage("No app use recorded in the last 7 days yet.");
+            showMessage("No app use recorded this week yet.");
             return;
         }
         ranked.sort((a, b) -> Long.compare(score(scores, b.pkg), score(scores, a.pkg)));
