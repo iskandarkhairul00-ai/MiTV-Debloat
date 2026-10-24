@@ -41,6 +41,8 @@ import java.util.Locale;
  */
 final class FileApi {
     private static final int MAX_ENTRIES = 2000;
+    /** Sanity cap on an upload, on top of the free-space check. */
+    private static final long MAX_UPLOAD = 16L * 1024 * 1024 * 1024;
 
     private final Context ctx;
 
@@ -134,22 +136,78 @@ final class FileApi {
         return f != null && f.isFile() && f.canRead() ? f : null;
     }
 
-    /** Streams a file as a download. */
-    void download(File f, OutputStream out) throws IOException {
-        String head = "HTTP/1.1 200 OK\r\n"
-                + "Content-Type: " + mime(f, "application/octet-stream") + "\r\n"
-                + "Content-Length: " + f.length() + "\r\n"
-                + "Content-Disposition: attachment; filename*=UTF-8''" + URLEncoder.encode(f.getName(), "UTF-8").replace("+", "%20") + "\r\n"
-                + "Cache-Control: no-store\r\n"
-                + "X-Content-Type-Options: nosniff\r\n"
-                + "Referrer-Policy: no-referrer\r\n"
-                + "Connection: close\r\n\r\n";
-        out.write(head.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+    /** Streams a file as a download, honouring a single "bytes=" Range so players can seek. */
+    void download(File f, OutputStream out, String range) throws IOException {
+        long size = f.length();
+        long start = 0, end = size - 1;
+        boolean partial = false;
+        if (range != null) {
+            long[] r = parseRange(range, size);
+            if (r != null) {
+                start = r[0];
+                end = r[1];
+                partial = true;
+            }
+        }
+        long length = end - start + 1;
+        StringBuilder head = new StringBuilder()
+                .append(partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n")
+                .append("Content-Type: ").append(mime(f, "application/octet-stream")).append("\r\n")
+                .append("Content-Length: ").append(length).append("\r\n")
+                .append("Accept-Ranges: bytes\r\n");
+        if (partial) {
+            head.append("Content-Range: bytes ").append(start).append('-').append(end).append('/').append(size).append("\r\n");
+        }
+        head.append("Content-Disposition: attachment; filename*=UTF-8''")
+                .append(URLEncoder.encode(f.getName(), "UTF-8").replace("+", "%20")).append("\r\n")
+                .append("Cache-Control: no-store\r\n")
+                .append("X-Content-Type-Options: nosniff\r\n")
+                .append("Referrer-Policy: no-referrer\r\n")
+                .append("Connection: close\r\n\r\n");
+        out.write(head.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
         try (InputStream in = new FileInputStream(f)) {
+            for (long skip = start; skip > 0; ) {
+                long n = in.skip(skip);
+                if (n <= 0) break;
+                skip -= n;
+            }
             byte[] buf = new byte[64 * 1024];
-            for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+            for (long left = length; left > 0; ) {
+                int n = in.read(buf, 0, (int) Math.min(buf.length, left));
+                if (n < 0) break;
+                out.write(buf, 0, n);
+                left -= n;
+            }
         }
         out.flush();
+    }
+
+    /** A single "bytes=a-b" / "bytes=a-" / "bytes=-n" range; null (send the whole file) otherwise. */
+    private static long[] parseRange(String header, long size) {
+        if (size <= 0 || header == null) return null;
+        String v = header.trim();
+        if (!v.startsWith("bytes=")) return null;
+        v = v.substring(6).trim();
+        if (v.isEmpty() || v.contains(",")) return null; // multi-range: fall back to the whole file
+        int dash = v.indexOf('-');
+        if (dash < 0) return null;
+        try {
+            String a = v.substring(0, dash).trim(), b = v.substring(dash + 1).trim();
+            long start, end;
+            if (a.isEmpty()) {
+                long n = Long.parseLong(b);
+                if (n <= 0) return null;
+                start = Math.max(0, size - n);
+                end = size - 1;
+            } else {
+                start = Long.parseLong(a);
+                end = b.isEmpty() ? size - 1 : Math.min(Long.parseLong(b), size - 1);
+            }
+            if (start < 0 || start > end) return null;
+            return new long[] {start, end};
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**
@@ -160,6 +218,7 @@ final class FileApi {
         File dir = resolve(dirPath);
         if (dir == null || !dir.isDirectory()) return result(403, "Choose a folder on the TV first.");
         if (length < 0) return result(411, "Upload needs a Content-Length.");
+        if (length > MAX_UPLOAD) return result(413, "That file is too big to upload.");
         String name = cleanName(rawName);
         if (name.isEmpty()) return result(400, "Missing file name.");
         long free = new StatFs(dir.getPath()).getAvailableBytes();

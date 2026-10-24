@@ -15,6 +15,7 @@ import android.net.LinkProperties;
 import android.net.Network;
 import android.os.Build;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.KeyEvent;
 
 import org.json.JSONArray;
@@ -68,7 +69,12 @@ final class RemoteServer {
     private static final int PIN_FAILS_BEFORE_LOCK = 5;
     private static final long LOCK_BASE_MS = 30_000;
     private static final long LOCK_MAX_MS = 15 * 60_000;
-    private static final String IP_HOST = "\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?";
+    private static final String IP_HOST = "(\\d{1,3}(\\.\\d{1,3}){3}|\\[[0-9a-fA-F:]+\\])(:\\d+)?";
+    /** Very generous per-phone fixed window, so a flood is refused but a screenful of banner
+     *  images isn't. */
+    private static final int RATE_MAX = 600;
+    private static final long RATE_WINDOW_MS = 10_000;
+    private static final String TAG = "TVHomeRemote";
     /** Locked down by default; scripts are allowed only by the nonce on the page's own tag. */
     private static final String CSP = "default-src 'none'; img-src 'self' data: blob:; font-src 'self';"
             + " connect-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline';"
@@ -76,7 +82,9 @@ final class RemoteServer {
     private static final String CSP_NO_SCRIPTS = CSP + "'none'";
 
     private final Context ctx;
-    private final ExecutorService pool = Executors.newFixedThreadPool(3);
+    private final ExecutorService pool = Executors.newFixedThreadPool(4);
+    // Uploads, downloads and screenshots run here, so a slow transfer can't hold up key presses.
+    private final ExecutorService ioPool = Executors.newFixedThreadPool(2);
     private final PinOverlay overlay;
     private final MessageOverlay messages;
     private final FileApi files;
@@ -84,6 +92,8 @@ final class RemoteServer {
     private final RemoteDevices devices;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, byte[]> banners = new HashMap<>();
+    // Per-phone request counts (fixed window), guarded by this.
+    private final Map<String, long[]> rates = new HashMap<>();
     private final SleepTimer sleepTimer;
     private final RemoteSettings settings;
     private volatile boolean running;
@@ -142,6 +152,7 @@ final class RemoteServer {
             }
         }
         pool.shutdownNow();
+        ioPool.shutdownNow();
         overlay.hide();
     }
 
@@ -164,15 +175,33 @@ final class RemoteServer {
     // ---------------------------------------------------------------- HTTP
 
     private void handle(Socket c) {
-        try (Socket s = c) {
-            s.setSoTimeout(10_000);
-            InputStream in = new BufferedInputStream(s.getInputStream());
-            OutputStream out = s.getOutputStream();
+        InputStream in;
+        OutputStream out;
+        try {
+            c.setSoTimeout(10_000);
+            in = new BufferedInputStream(c.getInputStream());
+            out = c.getOutputStream();
+        } catch (IOException e) {
+            closeQuietly(c);
+            return;
+        }
+
+        String summary = null;
+        try {
             String requestLine = readLine(in);
-            if (requestLine == null) return;
+            if (requestLine == null) {
+                c.close();
+                return;
+            }
             String[] parts = requestLine.split(" ");
-            if (parts.length < 2) return;
+            if (parts.length < 2) {
+                c.close();
+                return;
+            }
             String method = parts[0], target = parts[1];
+            int q = target.indexOf('?');
+            String path = q < 0 ? target : target.substring(0, q);
+            summary = method + " " + path; // for the failure log; no query, so no token
 
             Map<String, String> headers = new HashMap<>();
             for (int i = 0; i < 64; i++) {
@@ -184,6 +213,7 @@ final class RemoteServer {
             String host = headers.get("host");
             if (host == null || !host.matches(IP_HOST)) {
                 json(out, 403, err("Open the remote with the TV's IP address."));
+                c.close();
                 return;
             }
             // A web page on another site can't drive the remote: its requests either don't carry the
@@ -193,6 +223,13 @@ final class RemoteServer {
             if ("cross-site".equals(headers.get("sec-fetch-site"))
                     || (origin != null && !origin.matches("(?i)https?://" + IP_HOST))) {
                 json(out, 403, err("Cross-site requests aren't allowed."));
+                c.close();
+                return;
+            }
+            String clientIp = c.getInetAddress().getHostAddress();
+            if (!allow(clientIp)) {
+                json(out, 429, err("Too many requests from this device. Try again in a moment."));
+                c.close();
                 return;
             }
             long length = headers.containsKey("content-length") ? -1 : 0;
@@ -200,22 +237,30 @@ final class RemoteServer {
                 length = Long.parseLong(headers.getOrDefault("content-length", "0"));
             } catch (NumberFormatException ignored) {
             }
-            int q = target.indexOf('?');
-            String path = q < 0 ? target : target.substring(0, q);
             Map<String, String> query = parseQuery(q < 0 ? "" : target.substring(q + 1));
 
-            // Uploads are the one route with a big body: stream it straight to disk.
+            // Uploads are the one route with a big body: stream it straight to disk, on the IO pool
+            // so a slow transfer can't block key presses.
             if (path.equals("/api/files/upload")) {
-                if (!authorised(requestToken(headers))) json(out, 401, err("Not paired."));
-                else if (post(method, out)) {
-                    s.setSoTimeout(30_000);
-                    json(out, files.upload(query.get("dir"), query.get("name"), length, in));
+                if (!authorised(requestToken(headers))) {
+                    json(out, 401, err("Not paired."));
+                    c.close();
+                    return;
                 }
+                if (!post(method, out)) {
+                    c.close();
+                    return;
+                }
+                c.setSoTimeout(30_000);
+                final long size = length;
+                final String dir = query.get("dir"), name = query.get("name");
+                offload(c, () -> json(out, files.upload(dir, name, size, in)));
                 return;
             }
 
             if (length < 0 || length > MAX_BODY) {
                 json(out, 413, err("Request too large."));
+                c.close();
                 return;
             }
             byte[] body = new byte[(int) length];
@@ -224,9 +269,65 @@ final class RemoteServer {
                 if (n < 0) break;
                 read += n;
             }
-            route(method, path, query, headers, body, out, c.getInetAddress().getHostAddress());
-        } catch (IOException | RuntimeException | JSONException ignored) {
+            // Downloads and screenshots are slow too: same separate pool.
+            if (path.equals("/api/files/raw") || path.equals("/api/screenshot")) {
+                final String m = method, p = path, ip = clientIp;
+                final Map<String, String> h = headers, qy = query;
+                final byte[] b = body;
+                offload(c, () -> route(m, p, qy, h, b, out, ip));
+                return;
+            }
+            route(method, path, query, headers, body, out, clientIp);
+            c.close();
+        } catch (IOException | RuntimeException | JSONException e) {
+            // Swallowing this hid every remote bug. Log one line (path, not token) and answer 500,
+            // instead of leaving the phone to time out.
+            Log.w(TAG, summary + " failed: " + e);
+            try {
+                json(out, 500, err("The TV couldn't do that."));
+            } catch (IOException ignored) {
+            }
+            closeQuietly(c);
         }
+    }
+
+    /** Runs a slow transfer on the IO pool, then closes the socket. */
+    private void offload(Socket c, IoBody task) {
+        ioPool.execute(() -> {
+            try {
+                task.run();
+            } catch (IOException | RuntimeException | JSONException e) {
+                // A partial body may already be on the wire, so only log it.
+                Log.w(TAG, "transfer failed: " + e);
+            } finally {
+                closeQuietly(c);
+            }
+        });
+    }
+
+    private interface IoBody {
+        void run() throws IOException, JSONException;
+    }
+
+    private static void closeQuietly(Socket c) {
+        try {
+            c.close();
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** False once a single phone has sent more than RATE_MAX requests in the window. */
+    private synchronized boolean allow(String ip) {
+        long now = SystemClock.elapsedRealtime();
+        if (rates.size() > 32) {
+            rates.entrySet().removeIf(e -> now - e.getValue()[0] > RATE_WINDOW_MS);
+        }
+        long[] w = rates.get(ip);
+        if (w == null || now - w[0] > RATE_WINDOW_MS) {
+            rates.put(ip, new long[] {now, 1});
+            return true;
+        }
+        return ++w[1] <= RATE_MAX;
     }
 
     private void route(String method, String path, Map<String, String> query, Map<String, String> headers,
@@ -335,7 +436,7 @@ final class RemoteServer {
             case "/api/files/raw": {
                 java.io.File f = files.file(query.get("path"));
                 if (f == null) json(out, 404, err("No such file."));
-                else files.download(f, out);
+                else files.download(f, out, headers.get("range"));
                 return;
             }
             case "/api/files/open":
