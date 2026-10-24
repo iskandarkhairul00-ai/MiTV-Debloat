@@ -55,6 +55,9 @@ final class AdbKeys {
     }
 
     private static final long KEYBOARD_IDLE_MS = 60_000;
+    // PIDs of the `hid` processes we started, so a later run (after a crash or update) can kill
+    // only ours. `pkill -f com.android.commands.hid` would also kill other apps' virtual devices.
+    private static final String PIDS_FILE = "/data/local/tmp/tvhome-hid-pids";
     // The keypad's `hid` process costs ~21 MB: start it on the first key, stop it after this idle.
     private static final long PAD_IDLE_MS = 5 * 60_000;
     // dadb doesn't always notice when "Allow USB debugging" is accepted, so a waiting connection is
@@ -206,9 +209,11 @@ final class AdbKeys {
                 adb = d; // so a timeout can close it while it waits for "Allow"
             }
             // hid processes belong to adbd and can outlive the launcher (crash, update): clear
-            // any left over so virtual devices don't pile up.
-            d.shell("pkill -f com.android.commands.hid");
-            d.shell("pkill -f " + MediaHelper.class.getName());
+            // any we started so virtual devices don't pile up. Only our own PIDs are killed
+            // (recorded in PIDS_FILE); `pkill -f com.android.commands.hid` would also take out
+            // virtual devices another app started.
+            killLeftoverHid(d);
+            shellQuiet(d, "pkill -f " + MediaHelper.class.getName());
             // The keypad device is created on the first key press (see send()).
             synchronized (lock) {
                 if (adb != d) return; // closed meanwhile (ADB turned off / timed out)
@@ -260,6 +265,7 @@ final class AdbKeys {
     /** Starts `hid -` (reading JSON commands from stdin) and registers a virtual HID device on it. */
     private static Hid openHid(Dadb d, String name, String descriptor) throws Exception {
         Hid h = start(d, "hid -");
+        recordPid(d, h.pid);
         AdbStream s = h.stream;
         Thread drain = new Thread(() -> {
             try {
@@ -286,6 +292,32 @@ final class AdbKeys {
         }
         try {
             h.stream.close();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Kills the `hid` processes recorded by a previous run, then clears the list. */
+    private static void killLeftoverHid(Dadb d) {
+        shellQuiet(d, "for p in $(cat " + PIDS_FILE + " 2>/dev/null); do "
+                + "grep -qa com.android.commands.hid.Hid /proc/$p/cmdline 2>/dev/null && kill $p; done; "
+                + "rm -f " + PIDS_FILE);
+    }
+
+    /** Remembers a `hid` PID (from the command's `echo $$`) so a later run can clean it up. */
+    private static void recordPid(Dadb d, String pid) {
+        if (pid == null || !pid.matches("\\d+")) return;
+        shellQuiet(d, "echo " + pid + " >> " + PIDS_FILE);
+    }
+
+    /** Runs a shell command and discards its output (fire-and-forget cleanup). */
+    private static void shellQuiet(Dadb d, String command) {
+        try {
+            AdbStream s = d.open("shell:" + command);
+            try {
+                while (s.getSource().readUtf8Line() != null) { /* discard */ }
+            } finally {
+                s.close();
+            }
         } catch (Throwable ignored) {
         }
     }
