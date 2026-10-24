@@ -38,6 +38,11 @@ android {
 
 dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    // Used directly by the launcher (ContextCompat and FileProvider, NonNull) but only pulled in
+    // through RecyclerView. Declared here at the versions resolution already picks, so the app
+    // doesn't break if RecyclerView stops depending on them.
+    implementation 'androidx.core:core:1.13.0'
+    implementation 'androidx.annotation:annotation:1.8.1'
     // Loopback ADB client for the phone remote (D-pad and typing in any app while USB debugging is on).
     implementation 'dev.mobile:dadb:1.2.10'
 
