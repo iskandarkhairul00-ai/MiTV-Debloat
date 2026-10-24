@@ -1,6 +1,7 @@
 package my.rafhan.app.tvhome;
 
 import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -917,6 +918,10 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- keys
 
+    // The launcher owns Back: it closes the menu / edit mode, and a TV has no gesture navigation
+    // to register a callback with. On phones the same key still works; only the predictive-back
+    // animation is skipped.
+    @SuppressLint("GestureBackNavigation")
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         int code = e.getKeyCode();

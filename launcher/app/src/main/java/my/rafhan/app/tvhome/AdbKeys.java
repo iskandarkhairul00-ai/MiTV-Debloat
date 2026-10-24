@@ -335,7 +335,7 @@ final class AdbKeys {
     boolean type(String text) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
-            int[] k = usageFor(text.charAt(i));
+            int[] k = HidKeys.usageFor(text.charAt(i));
             if (k != null) press(sb, k[0], k[1]);
         }
         return sb.length() == 0 || send(sb.toString(), true);
@@ -374,25 +374,6 @@ final class AdbKeys {
                 return false;
             }
         }
-    }
-
-    /** {modifiers, HID usage} for a US keyboard, or null. */
-    private static int[] usageFor(char c) {
-        final int shift = 0x02;
-        if (c >= 'a' && c <= 'z') return new int[] {0, 0x04 + (c - 'a')};
-        if (c >= 'A' && c <= 'Z') return new int[] {shift, 0x04 + (c - 'A')};
-        if (c >= '1' && c <= '9') return new int[] {0, 0x1E + (c - '1')};
-        String plain = "0 -=[]\\;'`,./";
-        int[] plainUsage = {0x27, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
-        int i = plain.indexOf(c);
-        if (i >= 0) return new int[] {0, plainUsage[i]};
-        String shifted = ")!@#$%^&*(_+{}|:\"~<>?";
-        int[] shiftedUsage = {0x27, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26,
-                0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
-        i = shifted.indexOf(c);
-        if (i >= 0) return new int[] {shift, shiftedUsage[i]};
-        if (c == '\n') return new int[] {0, 0x28};
-        return null;
     }
 
     void close() {

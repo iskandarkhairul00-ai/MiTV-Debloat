@@ -52,27 +52,40 @@ final class DockConfig {
     static synchronized List<String> load(Context ctx) {
         File custom = file(ctx);
         if (custom.isFile()) {
-            List<String> out = new ArrayList<>();
+            List<String> lines = new ArrayList<>();
             try (BufferedReader r = new BufferedReader(new FileReader(custom))) {
-                for (String line; (line = r.readLine()) != null; ) {
-                    line = line.trim();
-                    if (!line.isEmpty() && !line.startsWith("#") && !out.contains(line)) out.add(line);
-                }
+                for (String line; (line = r.readLine()) != null; ) lines.add(line);
             } catch (IOException ignored) {
             }
-            return out; // may be empty: every dock app was removed
+            return parse(lines); // may be empty: every dock app was removed
         }
         return new ArrayList<>(Arrays.asList(ctx.getResources().getStringArray(R.array.dock_packages)));
     }
 
+    /** dock.txt's lines: trimmed, comments and blanks dropped, duplicates removed, order kept. */
+    static List<String> parse(List<String> lines) {
+        List<String> out = new ArrayList<>();
+        for (String line : lines) {
+            line = line.trim();
+            if (!line.isEmpty() && !line.startsWith("#") && !out.contains(line)) out.add(line);
+        }
+        return out;
+    }
+
+    /** At most MAX packages, no nulls, empties or duplicates, order kept. */
+    static List<String> clean(List<String> pkgs) {
+        List<String> out = new ArrayList<>();
+        for (String p : pkgs) if (p != null && !p.isEmpty() && !out.contains(p) && out.size() < MAX) out.add(p);
+        return out;
+    }
+
     /** Saves the order (at most MAX, duplicates dropped) and tells listeners on the main thread. */
     static synchronized boolean save(Context ctx, List<String> pkgs) {
-        List<String> clean = new ArrayList<>();
-        for (String p : pkgs) if (p != null && !p.isEmpty() && !clean.contains(p) && clean.size() < MAX) clean.add(p);
+        List<String> picked = clean(pkgs);
         File f = file(ctx), tmp = new File(f.getPath() + ".tmp");
         try (FileOutputStream out = new FileOutputStream(tmp)) {
             StringBuilder sb = new StringBuilder("# Dock apps, left to right (edited on the TV or phone)\n");
-            for (String p : clean) sb.append(p).append('\n');
+            for (String p : picked) sb.append(p).append('\n');
             out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             return false;

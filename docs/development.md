@@ -17,6 +17,9 @@ MiTV-Debloat/
 │   ├── home-default.txt, home-candidates.txt, accessibility.txt, private-dns-before.txt
 │   └── dumpsys/                 activities/services of every manufacturer package that was checked
 ├── launcher/                    the launcher source (Java, AndroidX RecyclerView, minSdk 29, targetSdk 36), incl. the phone remote
+│   ├── app/src/main/            the launcher, the phone remote page (assets/remote.html) and its resources
+│   └── app/src/test/            unit tests for the pure logic (no TV or emulator needed)
+├── .github/workflows/ci.yml     GitHub Actions: lint, unit tests and the release build on every push
 ├── scripts/
 │   ├── build-and-install.sh     check the computer and TV, build the launcher (R8 release, ~0.6 MB APK), install it, make it the home screen
 │   ├── benchmark.sh             measure a launcher's memory, CPU, start-up and smoothness
@@ -42,6 +45,29 @@ Notes on the install:
 - While the stock launcher is enabled, it always wins (its priority is 2). That's why it has to be disabled.
 - **New TV IP:** run `TV=<new-ip> scripts/build-and-install.sh` once; the new address is saved in `.tv` for every script.
 - **Adding a permission:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
+
+## Tests and CI
+
+The launcher's pure logic is unit tested on the computer, so a change doesn't need the TV to catch a regression:
+
+```bash
+cd launcher
+./gradlew testDebugUnitTest     # just the tests (37 of them, a few seconds)
+./gradlew lint                  # Android lint; errors fail the build, warnings don't
+./gradlew assembleRelease       # the APK scripts/build-and-install.sh installs
+```
+
+Gradle needs Java 17+: `export JAVA_HOME="$(/usr/libexec/java_home -v 17+)"` on macOS, or `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64` on Linux. The tests read a stubbed `android.jar`, so they can't touch the TV's APIs — that's why the logic they cover is kept free of `Context`:
+
+| Test | Covers |
+|---|---|
+| `FileApiTest` | Files tab: name cleaning, unique names, `Range` parsing, keeping paths inside a root |
+| `HidKeysTest` | Phone typing → USB-HID reports (letters, digits, punctuation) |
+| `DockConfigTest` | `dock.txt` parsing and cleaning (comments, blanks, duplicates, the 5-app cap) |
+| `UsageScoresTest` | "Most used": the week window, the per-day merge, per-app totals, exclusions |
+| `RemotePairingTest` | Pairing: PIN lifetime, tries, lockout and its exponential backoff |
+
+`.github/workflows/ci.yml` runs the same three tasks on every push and pull request, validates the Gradle wrapper and uploads the release APK as a build artifact.
 
 ## Benchmark
 

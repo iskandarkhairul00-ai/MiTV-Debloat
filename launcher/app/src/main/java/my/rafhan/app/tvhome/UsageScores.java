@@ -79,6 +79,18 @@ final class UsageScores {
 
         // Merge with the launcher's copy: per day and app, the larger figure wins.
         Map<LocalDate, Map<String, Long>> saved = readHistory(ctx);
+        if (merge(saved, days, first, today)) writeHistory(ctx, saved);
+
+        Set<String> excluded = LauncherSettings.usageExcluded(ctx); // Settings → Home screen
+        return totals(saved, weekStart, excluded);
+    }
+
+    /**
+     * Merges a day's Android figures into the launcher's copy (the larger wins, per day and app)
+     * and drops days outside [{@code first}, {@code today}]. Returns true if anything changed.
+     */
+    static boolean merge(Map<LocalDate, Map<String, Long>> saved, Map<LocalDate, Map<String, Long>> days,
+                         LocalDate first, LocalDate today) {
         boolean changed = false;
         for (Map.Entry<LocalDate, Map<String, Long>> d : days.entrySet()) {
             Map<String, Long> keep = saved.computeIfAbsent(d.getKey(), k -> new HashMap<>());
@@ -91,9 +103,11 @@ final class UsageScores {
             }
         }
         if (saved.keySet().removeIf(d -> d.isBefore(first) || d.isAfter(today))) changed = true;
-        if (changed) writeHistory(ctx, saved);
+        return changed;
+    }
 
-        Set<String> excluded = LauncherSettings.usageExcluded(ctx); // Settings → Home screen
+    /** Per-app totals from {@code weekStart} on, leaving out {@code excluded}. */
+    static Map<String, Long> totals(Map<LocalDate, Map<String, Long>> saved, LocalDate weekStart, Set<String> excluded) {
         Map<String, Long> scores = new HashMap<>();
         for (Map.Entry<LocalDate, Map<String, Long>> day : saved.entrySet()) {
             if (day.getKey().isBefore(weekStart)) continue; // kept, but last week
@@ -107,6 +121,11 @@ final class UsageScores {
     /** The first day of this week: the last Monday or Sunday (Settings), or today if it is one. */
     static LocalDate weekStart(Context ctx, LocalDate today) {
         DayOfWeek start = LauncherSettings.choice(ctx, LauncherSettings.WEEK_START) == 7 ? DayOfWeek.SUNDAY : DayOfWeek.MONDAY;
+        return weekStart(start, today);
+    }
+
+    /** The first day of the week that starts on {@code start}: the last one, or today if it is one. */
+    static LocalDate weekStart(DayOfWeek start, LocalDate today) {
         return today.with(TemporalAdjusters.previousOrSame(start));
     }
 

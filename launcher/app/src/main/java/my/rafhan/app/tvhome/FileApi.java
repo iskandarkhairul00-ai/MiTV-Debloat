@@ -183,7 +183,7 @@ final class FileApi {
     }
 
     /** A single "bytes=a-b" / "bytes=a-" / "bytes=-n" range; null (send the whole file) otherwise. */
-    private static long[] parseRange(String header, long size) {
+    static long[] parseRange(String header, long size) {
         if (size <= 0 || header == null) return null;
         String v = header.trim();
         if (!v.startsWith("bytes=")) return null;
@@ -284,20 +284,37 @@ final class FileApi {
     // ---------------------------------------------------------------- helpers
 
     private File resolve(String path) {
+        List<File> dirs = new ArrayList<>();
+        for (Root r : roots()) dirs.add(r.dir);
+        return resolve(path, dirs);
+    }
+
+    /**
+     * Canonical form of {@code path} if it sits inside one of {@code roots}, else null. "../"
+     * tricks and absolute paths elsewhere (/data, /system) resolve outside the roots and are
+     * refused. Takes the roots as an argument so it can be unit tested without a Context.
+     */
+    static File resolve(String path, List<File> roots) {
         if (path == null || path.isEmpty()) return null;
         File f = canonical(new File(path));
-        return rootOf(f) != null ? f : null;
+        for (File root : roots) if (inside(f, root)) return f;
+        return null;
+    }
+
+    /** True if {@code f} is {@code root} or below it. */
+    static boolean inside(File f, File root) {
+        return f != null && root != null && (f.equals(root) || f.getPath().startsWith(root.getPath() + "/"));
     }
 
     private Root rootOf(File f) {
         if (f == null) return null;
         for (Root r : roots()) {
-            if (f.equals(r.dir) || f.getPath().startsWith(r.dir.getPath() + "/")) return r;
+            if (inside(f, r.dir)) return r;
         }
         return null;
     }
 
-    private static File canonical(File f) {
+    static File canonical(File f) {
         try {
             return f.getCanonicalFile();
         } catch (IOException e) {
@@ -305,7 +322,7 @@ final class FileApi {
         }
     }
 
-    private static String cleanName(String raw) {
+    static String cleanName(String raw) {
         if (raw == null) return "";
         String n = raw.replace('\\', '/');
         n = n.substring(n.lastIndexOf('/') + 1).trim();
@@ -314,7 +331,7 @@ final class FileApi {
     }
 
     /** "name.ext", or "name (1).ext" ... if taken. */
-    private static File unique(File dir, String name) {
+    static File unique(File dir, String name) {
         File f = new File(dir, name);
         if (!f.exists()) return f;
         int dot = name.lastIndexOf('.');

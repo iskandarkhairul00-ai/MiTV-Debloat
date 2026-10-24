@@ -6,6 +6,8 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.IBinder;
 
 /**
@@ -66,6 +68,18 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         if (!on && server != null) {
             server.stop();
             server = null;
+        }
+        updateNotification();
+    }
+
+    /**
+     * The service's own notification (the one startForeground shows). On Android 13+ a plain
+     * notify() needs POST_NOTIFICATIONS; without the grant it would be dropped anyway, so skip it.
+     */
+    private void updateNotification() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return;
         }
         getSystemService(NotificationManager.class).notify(1, notification());
     }

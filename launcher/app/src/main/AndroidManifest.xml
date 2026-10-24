@@ -19,6 +19,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Android 13+: updating the phone-remote notification. The launcher doesn't prompt for it,
+         so without the grant RemoteService simply skips the update; the foreground notification
+         startForeground shows is not affected. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Phone remote Files tab: browse, upload and download the TV's storage. On Android 10
          READ/WRITE plus requestLegacyExternalStorage give plain file access; both are granted
          over ADB by build-and-install.sh. On Android 11+ those are ignored and "All files

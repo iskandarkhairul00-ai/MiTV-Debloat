@@ -29,10 +29,17 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    testOptions {
+        // Unit tests read a stubbed android.jar; the pure classes they exercise never call into it.
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     // Loopback ADB client for the phone remote (D-pad and typing in any app while USB debugging is on).
     implementation 'dev.mobile:dadb:1.2.10'
+
+    testImplementation 'junit:junit:4.13.2'
 }

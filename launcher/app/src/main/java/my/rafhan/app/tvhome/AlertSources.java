@@ -1,5 +1,6 @@
 package my.rafhan.app.tvhome;
 
+import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -230,6 +231,9 @@ final class AlertSources {
     // ---------------------------------------------------------------- Bluetooth
 
     private final BroadcastReceiver btReceiver = new BroadcastReceiver() {
+        // getName() needs BLUETOOTH_CONNECT on Android 12+. The launcher doesn't hold it, so the
+        // call throws there and the catch falls back to the address, which is all we show then.
+        @SuppressLint("MissingPermission")
         @Override
         public void onReceive(Context c, Intent intent) {
             BluetoothDevice dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
