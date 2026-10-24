@@ -19,19 +19,24 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Bing's "photo of the day" as a wallpaper that changes by itself each day (like glass-tv). The
- * last seven days' pictures are downloaded from Bing's public HPImageArchive feed and cached in
- * the app's files dir; the newest (today's) is shown, and a new one swaps in each day. Nothing is
- * bundled in the APK. Only scenic pictures are kept: ones whose caption names people, or where a
- * face is detected, are skipped, so the wallpaper has no people or faces.
+ * Bing's "photo of the day" as a wallpaper that changes by itself each day. The last seven days'
+ * pictures are downloaded from Bing's public HPImageArchive feed and cached in the app's files
+ * dir; the newest is shown. Bing's day follows its market (the TV's language: en-US starts a new
+ * picture at 07:00 UTC, 15:00 in Malaysia), so the feed is checked again only once the next
+ * picture is due, not at local midnight. Nothing is bundled in the APK. Only scenic pictures are
+ * kept: ones whose caption names people, or where a face is detected, are skipped (and remembered,
+ * so they aren't downloaded again), so the wallpaper has no people or faces.
  */
 final class Bing {
     private static final String TAG = "TvHome.Bing";
@@ -40,7 +45,8 @@ final class Bing {
     private static final String UA = "Mozilla/5.0 (Linux; Android 10; TV) AppleWebKit/537.36 "
             + "(KHTML, like Gecko) Chrome/120.0 Safari/537.36";
     private static final int KEEP = 7;
-    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final DateTimeFormatter FULL = DateTimeFormatter.ofPattern("yyyyMMddHHmm"); // UTC
+    private static final long DAY_MS = 24 * 60 * 60_000L;
 
     // Captions that name people (mirrors glass-tv): the picture is skipped even if no face is found.
     private static final Pattern PEOPLE = Pattern.compile("(?i)\\b(people|persons?|man|men|woman|women"
@@ -70,10 +76,8 @@ final class Bing {
         return out;
     }
 
-    /** Today's picture if cached, else the newest cached one; null when nothing is cached. */
+    /** The newest cached picture (Bing's current one); null when nothing is cached. */
     static File shown(Context ctx) {
-        File today = new File(dir(ctx), LocalDate.now().format(STAMP) + ".jpg");
-        if (today.isFile()) return today;
         List<File> all = cached(ctx);
         return all.isEmpty() ? null : all.get(0);
     }
@@ -92,9 +96,12 @@ final class Bing {
         }
     }
 
-    /** True when today's picture isn't cached yet, so a refresh should run (at most once a day). */
+    /**
+     * True when nothing is cached, or Bing's next picture should be out: the newest picture in the
+     * last feed started at its "fullstartdate" (UTC), and the next one follows 24 h later.
+     */
     static boolean due(Context ctx) {
-        return !new File(dir(ctx), LocalDate.now().format(STAMP) + ".jpg").isFile();
+        return cached(ctx).isEmpty() || System.currentTimeMillis() >= prefs(ctx).getLong("next_at", 0);
     }
 
     /** Downloads the week's scenic pictures, keeps the 7 newest. Blocking: call off the main thread. */
@@ -107,6 +114,9 @@ final class Bing {
             JSONObject feed = new JSONObject(new String(
                     get(FEED + URLEncoder.encode(mkt, "UTF-8"), 256 * 1024), StandardCharsets.UTF_8));
             JSONArray images = feed.optJSONArray("images");
+            long newestStart = 0;
+            Set<String> skipped = prefs(ctx).getStringSet("skipped", new HashSet<>());
+            Set<String> stillSkipped = new HashSet<>(); // pruned to what the feed still lists
             for (int i = 0; images != null && i < images.length(); i++) {
                 JSONObject img = images.optJSONObject(i);
                 if (img == null) continue;
@@ -115,16 +125,28 @@ final class Bing {
                 String title = img.optString("title", "").trim();
                 String copyright = img.optString("copyright", "").trim();
                 if (date.length() != 8 || urlbase.isEmpty()) continue;
+                try {
+                    long start = LocalDateTime.parse(img.optString("fullstartdate", ""), FULL)
+                            .toInstant(ZoneOffset.UTC).toEpochMilli();
+                    newestStart = Math.max(newestStart, start);
+                } catch (Exception ignored) {
+                }
                 File out = new File(d, date + ".jpg");
                 if (out.isFile()) continue;                          // already have this day
+                if (skipped.contains(date)) {                       // rejected before: don't download again
+                    stillSkipped.add(date);
+                    continue;
+                }
                 if (PEOPLE.matcher(title + " " + copyright).find()) {
                     Log.i(TAG, "skipped, names people: " + title);
+                    stillSkipped.add(date);
                     continue;
                 }
                 byte[] jpg = get("https://www.bing.com" + urlbase + "_1920x1080.jpg", 3 * 1024 * 1024);
                 int faces = faces(jpg);
                 if (faces != 0) {
                     Log.i(TAG, "skipped, " + (faces < 0 ? "unreadable" : faces + " face(s)") + ": " + title);
+                    if (faces > 0) stillSkipped.add(date); // an unreadable download may be fine next time
                     continue;
                 }
                 write(out, jpg);
@@ -134,7 +156,12 @@ final class Bing {
                 gotNew = true;
             }
             trim(ctx);
-            prefs(ctx).edit().putString("newest", cached(ctx).isEmpty() ? "" : cached(ctx).get(0).getName()).apply();
+            SharedPreferences.Editor e = prefs(ctx).edit().putStringSet("skipped", stillSkipped);
+            // The next picture is due 24 h after the newest one started (unknown: try again in an hour).
+            long next = newestStart > 0 ? newestStart + DAY_MS : System.currentTimeMillis() + DAY_MS / 24;
+            e.putLong("next_at", next).apply();
+            Log.i(TAG, "refreshed (" + (gotNew ? "new picture" : "nothing new") + "); next picture due "
+                    + java.time.Instant.ofEpochMilli(next));
             return gotNew;
         } catch (Exception e) {
             Log.w(TAG, "refresh failed: " + e);
