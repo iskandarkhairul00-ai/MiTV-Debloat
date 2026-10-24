@@ -4,7 +4,6 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -36,11 +35,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -52,8 +49,13 @@ import java.util.concurrent.Executors;
  * plain intents (SYSTEM_ALERT_WINDOW exempts us from Android 10's background-start block).
  *
  * Pairing: the phone asks for a PIN, the TV shows it (PinOverlay), the phone sends it back and
- * gets a token, kept in SharedPreferences "remote". Every other API call needs X-Token.
- * Requests whose Host isn't an IP address are refused (DNS rebinding).
+ * gets a token. The token is kept in the phone's localStorage and sent as X-Token; its SHA-256 is
+ * what the TV stores (RemoteDevices), so the prefs file can't be replayed. Images and downloads
+ * (which can't set a header) authenticate with an HttpOnly SameSite=Strict cookie instead, so the
+ * token never has to appear in a URL.
+ *
+ * Requests whose Host isn't an IP address are refused (DNS rebinding), and cross-site requests are
+ * refused too, so a web page can't drive the remote.
  */
 final class RemoteServer {
     static final int PORT = 8486;
@@ -64,11 +66,11 @@ final class RemoteServer {
 
     private final Context ctx;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
-    private final SharedPreferences prefs;
     private final PinOverlay overlay;
     private final MessageOverlay messages;
     private final FileApi files;
     private final AdbKeys adbKeys;
+    private final RemoteDevices devices;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, byte[]> banners = new HashMap<>();
     private final SleepTimer sleepTimer;
@@ -90,11 +92,11 @@ final class RemoteServer {
     RemoteServer(Context ctx, SleepTimer sleepTimer) {
         this.ctx = ctx;
         this.sleepTimer = sleepTimer;
-        prefs = ctx.getSharedPreferences("remote", Context.MODE_PRIVATE);
         overlay = new PinOverlay(ctx);
         messages = new MessageOverlay(ctx);
         files = new FileApi(ctx);
         adbKeys = AdbKeys.get(ctx);
+        devices = new RemoteDevices(ctx);
         settings = new RemoteSettings(ctx);
     }
 
@@ -170,6 +172,15 @@ final class RemoteServer {
                 json(out, 403, err("Open the remote with the TV's IP address."));
                 return;
             }
+            // A web page on another site can't drive the remote: its requests either don't carry the
+            // cookie (SameSite=Strict) or are flagged here. The IP-only Host check above already
+            // stops DNS rebinding.
+            String origin = headers.get("origin");
+            if ("cross-site".equals(headers.get("sec-fetch-site"))
+                    || (origin != null && !origin.matches("(?i)https?://" + IP_HOST))) {
+                json(out, 403, err("Cross-site requests aren't allowed."));
+                return;
+            }
             long length = headers.containsKey("content-length") ? -1 : 0;
             try {
                 length = Long.parseLong(headers.getOrDefault("content-length", "0"));
@@ -181,9 +192,7 @@ final class RemoteServer {
 
             // Uploads are the one route with a big body: stream it straight to disk.
             if (path.equals("/api/files/upload")) {
-                String token = headers.get("x-token");
-                if (token == null) token = query.get("t");
-                if (!authorised(token)) json(out, 401, err("Not paired."));
+                if (!authorised(requestToken(headers))) json(out, 401, err("Not paired."));
                 else if (post(method, out)) {
                     s.setSoTimeout(30_000);
                     json(out, files.upload(query.get("dir"), query.get("name"), length, in));
@@ -230,14 +239,22 @@ final class RemoteServer {
                 if (post(method, out)) json(out, requestPin());
                 return;
             case "/api/pair/confirm":
-                if (post(method, out)) json(out, confirmPin(body));
+                if (post(method, out)) {
+                    Object[] r = confirmPin(body, headers.get("user-agent"));
+                    if ((int) r[0] == 200) {
+                        // Also hand the phone an HttpOnly cookie, so images and downloads (which
+                        // can't set a header) authenticate without a token in the URL.
+                        json(out, 200, (JSONObject) r[1], cookie(((JSONObject) r[1]).optString("token")));
+                    } else {
+                        json(out, r);
+                    }
+                }
                 return;
             default:
                 break;
         }
 
-        String token = headers.get("x-token");
-        if (token == null) token = query.get("t");
+        String token = requestToken(headers);
         if (!authorised(token)) {
             json(out, 401, err("Not paired."));
             return;
@@ -411,9 +428,30 @@ final class RemoteServer {
                 else send(out, 200, "image/jpeg", jpg, "max-age=86400");
                 return;
             }
+            case "/api/session":
+                // Confirms a token that was paired before cookies existed and hands it to this
+                // browser as a cookie, so banners/downloads work without a token in the URL.
+                if (post(method, out)) json(out, 200, ok(), cookie(token));
+                return;
+            case "/api/devices":
+                json(out, 200, new JSONObjectBuilder().put("ok", true).put("devices", devices.json(token)).build());
+                return;
+            case "/api/devices/revoke":
+                if (post(method, out)) {
+                    String id;
+                    try {
+                        id = new JSONObject(new String(body, StandardCharsets.UTF_8)).optString("id");
+                    } catch (JSONException e) {
+                        json(out, 400, err("Bad request."));
+                        return;
+                    }
+                    if (id.isEmpty() || !devices.remove(id)) json(out, 404, err("That phone isn't paired."));
+                    else json(out, 200, ok());
+                }
+                return;
             case "/api/unpair":
                 if (post(method, out)) {
-                    unpair(token);
+                    devices.removeByToken(token);
                     json(out, 200, ok());
                 }
                 return;
@@ -438,7 +476,7 @@ final class RemoteServer {
         return new Object[] {200, ok()};
     }
 
-    private synchronized Object[] confirmPin(byte[] body) {
+    private synchronized Object[] confirmPin(byte[] body, String userAgent) {
         String given;
         try {
             given = new JSONObject(new String(body, StandardCharsets.UTF_8)).optString("pin");
@@ -459,30 +497,46 @@ final class RemoteServer {
         }
         pin = null;
         overlay.hide();
+        String token = randomToken();
+        devices.add(token, RemoteDevices.name(userAgent));
+        return new Object[] {200, new JSONObjectBuilder().put("ok", true).put("token", token).build()};
+    }
+
+    private String randomToken() {
         byte[] b = new byte[16];
         random.nextBytes(b);
         StringBuilder sb = new StringBuilder();
         for (byte x : b) sb.append(String.format(Locale.ROOT, "%02x", x));
-        String token = sb.toString();
-        Set<String> tokens = new HashSet<>(prefs.getStringSet("tokens", new HashSet<>()));
-        tokens.add(token);
-        prefs.edit().putStringSet("tokens", tokens).apply();
-        return new Object[] {200, new JSONObjectBuilder().put("ok", true).put("token", token).build()};
+        return sb.toString();
     }
 
     private boolean authorised(String token) {
-        return token != null && !token.isEmpty() && prefs.getStringSet("tokens", new HashSet<>()).contains(token);
+        return devices.find(token) != null;
     }
 
     /** Settings → Forget all paired phones: every phone has to pair with a PIN again. */
     static void forgetAll(Context ctx) {
-        ctx.getSharedPreferences("remote", Context.MODE_PRIVATE).edit().remove("tokens").apply();
+        new RemoteDevices(ctx).removeAll();
     }
 
-    private void unpair(String token) {
-        Set<String> tokens = new HashSet<>(prefs.getStringSet("tokens", new HashSet<>()));
-        tokens.remove(token);
-        prefs.edit().putStringSet("tokens", tokens).apply();
+    /** The token of this request: the API header, or the pairing cookie for images and downloads. */
+    private static String requestToken(Map<String, String> headers) {
+        String token = headers.get("x-token");
+        if (token != null && !token.isEmpty()) return token;
+        String cookie = headers.get("cookie");
+        if (cookie == null) return null;
+        for (String part : cookie.split(";")) {
+            String c = part.trim();
+            if (c.startsWith(COOKIE + "=")) return c.substring(COOKIE.length() + 1);
+        }
+        return null;
+    }
+
+    private static final String COOKIE = "tvtoken";
+
+    /** HttpOnly (JS can't read it) and Strict (never sent from another site). */
+    private static String cookie(String token) {
+        return COOKIE + "=" + token + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000";
     }
 
     // ---------------------------------------------------------------- actions
@@ -932,16 +986,26 @@ final class RemoteServer {
     }
 
     private static void json(OutputStream out, int code, JSONObject body) throws IOException {
-        send(out, code, "application/json", body.toString().getBytes(StandardCharsets.UTF_8), "no-store");
+        json(out, code, body, null);
+    }
+
+    private static void json(OutputStream out, int code, JSONObject body, String setCookie) throws IOException {
+        send(out, code, "application/json", body.toString().getBytes(StandardCharsets.UTF_8), "no-store", setCookie);
     }
 
     private static void send(OutputStream out, int code, String type, byte[] body, String cache) throws IOException {
-        String head = "HTTP/1.1 " + code + " " + reason(code) + "\r\n"
-                + "Content-Type: " + type + "\r\n"
-                + "Content-Length: " + body.length + "\r\n"
-                + "Cache-Control: " + cache + "\r\n"
-                + "Connection: close\r\n\r\n";
-        out.write(head.getBytes(StandardCharsets.ISO_8859_1));
+        send(out, code, type, body, cache, null);
+    }
+
+    private static void send(OutputStream out, int code, String type, byte[] body, String cache, String setCookie) throws IOException {
+        StringBuilder head = new StringBuilder()
+                .append("HTTP/1.1 ").append(code).append(' ').append(reason(code)).append("\r\n")
+                .append("Content-Type: ").append(type).append("\r\n")
+                .append("Content-Length: ").append(body.length).append("\r\n")
+                .append("Cache-Control: ").append(cache).append("\r\n");
+        if (setCookie != null) head.append("Set-Cookie: ").append(setCookie).append("\r\n");
+        head.append("Connection: close\r\n\r\n");
+        out.write(head.toString().getBytes(StandardCharsets.ISO_8859_1));
         out.write(body);
         out.flush();
     }

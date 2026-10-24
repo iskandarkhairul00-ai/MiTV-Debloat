@@ -411,6 +411,9 @@ async function api(path, opts = {}) {
 }
 const post = (path, body) => api(path, { method: "POST", body: body ? JSON.stringify(body) : undefined,
   headers: body ? { "Content-Type": "application/json" } : {} });
+// The TV also sets an HttpOnly cookie at pairing; this refreshes it (and upgrades phones paired
+// before cookies existed) so banners and downloads, which can't send a header, stay authorised.
+const startSession = () => post("/api/session").catch(() => {});
 
 function show(which) {
   $("pair").classList.toggle("hidden", which !== "pair");
@@ -429,7 +432,7 @@ $("showPin").onclick = async () => {
 $("confirm").onclick = async () => {
   try {
     const r = await post("/api/pair/confirm", { pin: $("pin").value.trim() });
-    token = r.token; localStorage.setItem("tvtoken", token); $("pin").value = ""; show("main");
+    token = r.token; localStorage.setItem("tvtoken", token); $("pin").value = ""; await startSession(); show("main");
   } catch (e) { $("pairStatus").textContent = e.message; }
 };
 $("pin").addEventListener("input", () => { if ($("pin").value.length === 4) $("confirm").click(); });
@@ -645,7 +648,7 @@ async function loadRunning() {
 function runRow(r) {
   const row = document.createElement("div"); row.className = "run";
   const img = document.createElement("img"); img.alt = "";
-  img.src = "/api/banner?pkg=" + encodeURIComponent(r.pkg) + "&t=" + token;
+  img.src = "/api/banner?pkg=" + encodeURIComponent(r.pkg);
   const t = document.createElement("div"); t.className = "t";
   const mb = r.memKb > 0 ? Math.round(r.memKb / 1024) + " MB · " : "";
   t.innerHTML = `<div>${esc(r.label)}</div><span>${mb}${esc(r.hidden ? "Hidden" : r.state)}</span>`;
@@ -720,7 +723,7 @@ function appCard(a, tools, pos) {
   const b = document.createElement("button"); b.className = "app card";
   const art = document.createElement("div"); art.className = "art";
   const img = document.createElement("img"); img.alt = "";
-  img.src = "/api/banner?pkg=" + encodeURIComponent(a.pkg) + "&t=" + token;
+  img.src = "/api/banner?pkg=" + encodeURIComponent(a.pkg);
   art.appendChild(img);
   const label = document.createElement("span"); label.textContent = a.label;
   b.append(art, label);
@@ -836,7 +839,7 @@ async function loadDashboard() {
   const np = d.nowPlaying;
   $("npCard").classList.toggle("hidden", !np);
   if (np) {
-    $("npArt").src = "/api/banner?pkg=" + encodeURIComponent(np.pkg) + "&t=" + encodeURIComponent(token);
+    $("npArt").src = "/api/banner?pkg=" + encodeURIComponent(np.pkg);
     $("npApp").textContent = np.app + " · " + np.state;
     $("npTitle").textContent = np.title;
     $("npArtist").textContent = np.artist;
@@ -1012,7 +1015,7 @@ $("sheetOpen").onclick = async () => {
 $("sheetDownload").onclick = () => {
   const f = sheetFile; closeSheet();
   const a = document.createElement("a");
-  a.href = "/api/files/raw?path=" + encodeURIComponent(f.path) + "&t=" + token;
+  a.href = "/api/files/raw?path=" + encodeURIComponent(f.path);
   a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
 };
 
@@ -1074,7 +1077,38 @@ function renderSettings() {
     c.rows.forEach((r) => card.appendChild(settingRow(r)));
     box.appendChild(card);
   });
+  const phones = document.createElement("div"); phones.className = "card set";
+  phones.innerHTML = `<div class="card-h"><span>Paired phones</span></div><div id="devicesBox"><div class="empty">Loading…</div></div>`;
+  box.appendChild(phones);
   renderWalls();
+  loadDevices();
+}
+
+// Each phone that has paired, newest first, with its own Forget button ("Forget all" is on the TV).
+let devicesData = null;
+async function loadDevices() {
+  try { devicesData = (await api("/api/devices")).devices; renderDevices(); } catch (e) {}
+}
+function renderDevices() {
+  const box = $("devicesBox"); if (!box || !devicesData) return;
+  box.innerHTML = "";
+  devicesData.forEach((d) => {
+    const row = document.createElement("div"); row.className = "srow";
+    const t = document.createElement("div"); t.className = "t";
+    const seen = ago(d.lastSeen);
+    t.innerHTML = `<div>${esc(d.name)}${d.current ? " (this phone)" : ""}</div><span>Last used ${seen === "now" ? "just now" : seen + " ago"}</span>`;
+    const b = document.createElement("button"); b.textContent = "Forget";
+    b.onclick = async () => {
+      buzz();
+      try {
+        await post("/api/devices/revoke", { id: d.id });
+        if (d.current) { token = ""; localStorage.removeItem("tvtoken"); show("pair"); }
+        else { devicesData = (await api("/api/devices")).devices; renderDevices(); }
+      } catch (e) { flash(e.message); }
+    };
+    row.append(t, b);
+    box.appendChild(row);
+  });
 }
 function settingRow(r) {
   const row = document.createElement("div"); row.className = "srow";
@@ -1152,7 +1186,7 @@ function renderWalls() {
     const art = document.createElement("div"); art.className = "art";
     if (w.thumb) {
       const img = document.createElement("img"); img.alt = ""; img.loading = "lazy";
-      img.src = "/api/wallpaper/thumb?id=" + encodeURIComponent(w.id) + "&v=" + w.thumb + "&t=" + encodeURIComponent(token);
+      img.src = "/api/wallpaper/thumb?id=" + encodeURIComponent(w.id) + "&v=" + w.thumb;
       art.appendChild(img);
     }
     const label = document.createElement("span"); label.textContent = w.name; label.title = w.sub;
@@ -1238,7 +1272,8 @@ if (navigator.virtualKeyboard) {
   visualViewport.addEventListener("resize", () => setKb(isFull() ? innerHeight - visualViewport.height - visualViewport.offsetTop : 0));
 }
 
-show(token ? "main" : "pair");
+if (token) startSession().then(() => show(token ? "main" : "pair"));
+else show("pair");
 </script>
 </body>
 </html>

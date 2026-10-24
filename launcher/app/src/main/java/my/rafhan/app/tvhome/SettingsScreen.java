@@ -425,8 +425,7 @@ final class SettingsScreen {
         String url = RemoteServer.lanUrl(ctx);
         addr.value = () -> url.replace("http://", "");
         out.add(addr);
-        int paired = ctx.getSharedPreferences("remote", Context.MODE_PRIVATE)
-                .getStringSet("tokens", new HashSet<>()).size();
+        int paired = new RemoteDevices(ctx).count();
         Row f = new Row(paired > 0 ? ACTION : INFO, confirmForget ? "Press OK again to forget them" : "Forget all paired phones");
         f.sub = paired == 0 ? "No phones paired" : paired == 1 ? "1 phone paired" : paired + " phones paired";
         f.value = () -> confirmForget ? "Confirm" : "";
