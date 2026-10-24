@@ -95,8 +95,114 @@
   .list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
   .list button { text-align: left; font-size: 18px; padding: 18px; }
 
+  /* TV tab */
+  .tab.scroll { overflow-y: auto; display: block; padding-bottom: 8px; }
+  .tab.scroll > .card { padding: 14px 16px; margin-bottom: 12px; }
+  .card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px;
+    letter-spacing: .12em; color: var(--dim); margin-bottom: 10px; text-transform: uppercase; }
+  .card-h b { color: var(--accent); font-weight: 500; letter-spacing: .04em; text-transform: none; font-size: 13px; }
+  .card-h button { font-size: 12px; letter-spacing: 0; padding: 5px 12px; border-radius: 12px; text-transform: none; }
+  #np { display: flex; gap: 12px; align-items: center; }
+  #npArt { width: 88px; height: 50px; border-radius: 10px; object-fit: cover; background: #222; flex: none; }
+  #np .t { flex: 1; min-width: 0; }
+  #np .t div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #npApp { font-size: 11px; letter-spacing: .1em; color: var(--dim); text-transform: uppercase; }
+  #npTitle { font-size: 17px; font-weight: 500; margin-top: 2px; }
+  #npArtist { font-size: 13px; color: var(--dim); }
+  .np-btns { display: flex; gap: 8px; margin-top: 12px; }
+  .np-btns button { flex: 1; display: grid; place-items: center; padding: 10px 0; border-radius: 14px; }
+  .np-btns svg { width: 22px; height: 22px; fill: #fff; }
+  /* two small cards side by side: Prayer | System, Power | Inputs */
+  .duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .duo > .card { padding: 12px 14px; min-width: 0; }
+  .duo .card-h { margin-bottom: 8px; }
+  .big { font-size: 20px; font-weight: 500; color: var(--accent); white-space: nowrap; }
+  .big small { display: block; font-size: 12px; font-weight: 400; color: var(--dim); margin: 2px 0 8px; }
+  .kv > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; }
+  .kv span { flex: none; font-size: 12px; color: var(--dim); }
+  .kv b { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kv .next span, .kv .next b { color: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grid2 button { padding: 9px 2px; border-radius: 12px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini-h { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; letter-spacing: .1em; color: var(--dim);
+    text-transform: uppercase; margin: 10px 0 6px; }
+  .mini-h b { color: var(--accent); font-weight: 500; letter-spacing: 0; text-transform: none; }
+  .seg2 { display: flex; gap: 4px; }
+  .seg2 button.on { border-color: var(--accent); color: var(--accent); }
+  .alert { display: flex; gap: 10px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--edge); }
+  .alert:first-child { border-top: 0; padding-top: 0; }
+  .alert .t { flex: 1; min-width: 0; }
+  .alert .t div { font-size: 15px; }
+  .alert .t span { display: block; font-size: 13px; color: var(--dim); }
+  .alert time { font-size: 12px; color: var(--dim); flex: none; }
+  .empty { color: var(--dim); font-size: 14px; }
+  .inline { display: flex; gap: 8px; }
+  .inline input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--text); background: rgba(255,255,255,.05);
+    border: 1px solid var(--edge); border-radius: 14px; padding: 11px 12px; outline: none; }
+  .inline button { padding: 0 16px; border-radius: 14px; font-size: 15px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button.on { background: var(--glass-hi); border-color: var(--accent); color: var(--accent); }
+  .muted { color: var(--dim); font-size: 13px; margin-top: 8px; }
+  /* Apps tab: running apps, long-press menu, disabled apps */
+  .app { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+  .app img { pointer-events: none; }
+  .runs { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+  .run { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 16px; background: var(--glass); border: 1px solid var(--edge); }
+  .run img { width: 64px; height: 36px; border-radius: 8px; object-fit: cover; background: #1c1c1e; flex: none; }
+  .run .t { flex: 1; min-width: 0; }
+  .run .t div { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .run .t span { display: block; font-size: 12px; color: var(--dim); }
+  .run button { padding: 8px 12px; border-radius: 12px; font-size: 13px; flex: none; }
+  .wide { grid-column: 1 / -1; padding: 13px; border-radius: 14px; font-size: 15px; margin-top: 4px; }
+  .chips button { font-size: 15px; padding: 10px 14px; border-radius: 14px; }
+  /* Settings tab: rows from the TV's schema */
+  #settingsBox > .card { padding: 14px 16px 4px; margin-bottom: 12px; }
+  .srow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 12px; padding: 12px 0; border-top: 1px solid var(--edge); }
+  .card-h + .srow { border-top: 0; padding-top: 2px; }
+  .srow .t { flex: 1; min-width: 0; }
+  .srow.stack .t { flex-basis: 100%; }
+  .srow .t div { font-size: 16px; }
+  .srow .t span { display: block; font-size: 12px; color: var(--dim); margin-top: 2px; }
+  .srow > b { color: var(--accent); font-weight: 500; font-size: 15px; flex: none; }
+  .srow > button { padding: 8px 14px; border-radius: 12px; font-size: 14px; flex: none; }
+  .srow .seg { width: 100%; }
+  .seg button { flex: 1; padding: 9px 4px; font-size: 14px; }
+  .switch { flex: none; width: 50px; height: 30px; padding: 0; border: 0; border-radius: 15px; position: relative; background: rgba(255,255,255,.18); }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch.on { background: #34c759; }
+  .switch.on::after { transform: translateX(20px); }
+  .walls { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .wall { padding: 0; border-radius: 14px; overflow: hidden; text-align: left; border: 2px solid transparent; }
+  .wall.on { border-color: var(--accent); }
+  .wall .art { position: relative; padding-top: 56.25%; background: #1c1c1e; }
+  .wall img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .wall .art svg { position: absolute; inset: 0; margin: auto; width: 28px; height: 28px; fill: var(--dim); }
+  .wall span { display: block; padding: 6px 8px 7px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wall.on span { color: var(--accent); }
+  .picks { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 15px; text-align: left; }
+  .pick i { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--dim); display: grid; place-items: center; font-style: normal; }
+  .pick.on i { background: var(--accent); border-color: var(--accent); }
+  .pick.on i::after { content: "\2713"; color: #000; font-size: 14px; font-weight: 700; }
+  #zoneSheet { position: fixed; inset: 0; z-index: 11; background: #0d0d0f; display: flex; flex-direction: column; gap: 10px;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+  #zoneList { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .zone { text-align: left; padding: 11px 14px; border-radius: 14px; }
+  .zone div { font-size: 15px; }
+  .zone b { font-weight: 600; margin-right: 6px; }
+  .zone span { display: block; font-size: 13px; color: var(--dim); margin-top: 2px; }
+  .zone.on { border-color: var(--accent); }
+  .zone.on b { color: var(--accent); }
+
+  /* on-screen keyboard open (see "keyboard" in the script): lift the page above it */
+  body.kb { padding-bottom: calc(var(--kb) + 8px); }
+  body.kb nav { display: none; }
+  body.kb .tab { overflow-y: auto; }
+  body.kb #pad { min-height: 120px; }
+  body.kb #status { bottom: calc(var(--kb) + 12px); }
+
   /* tab bar */
-  nav { display: grid; grid-template-columns: repeat(4, 1fr); margin: 10px -16px calc(-1 * max(12px, env(safe-area-inset-bottom)));
+  nav { display: grid; grid-template-columns: repeat(5, 1fr); margin: 10px -16px calc(-1 * max(12px, env(safe-area-inset-bottom)));
     padding: 8px 8px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--edge); background: rgba(18,18,20,.92); }
   nav button { background: none; border: 0; border-radius: 12px; padding: 4px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
     font-size: 11px; color: rgba(255,255,255,.45); }
@@ -127,6 +233,12 @@
   .empty { color: var(--dim); font-size: 14px; text-align: center; padding: 40px 0; }
 
   /* action sheet */
+  #appSheet { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 10; }
+  #appSheet .panel { width: 100%; padding: 14px 16px max(16px, env(safe-area-inset-bottom)); background: #1c1c1e; border-radius: 22px 22px 0 0;
+    display: flex; flex-direction: column; gap: 10px; }
+  #appSheet .name { font-size: 14px; color: var(--dim); text-align: center; padding: 2px 8px 6px; }
+  #appSheet button { font-size: 17px; padding: 15px; }
+  #appSheet button.danger { color: #ff6b6b; }
   #sheet { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 10; }
   #sheet .panel { width: 100%; padding: 14px 16px max(16px, env(safe-area-inset-bottom)); background: #1c1c1e; border-radius: 22px 22px 0 0;
     display: flex; flex-direction: column; gap: 10px; }
@@ -179,7 +291,52 @@
   </div>
 
   <div class="tab hidden" id="tab-apps"><div class="grid" id="apps"></div></div>
-  <div class="tab hidden" id="tab-inputs"><div class="list" id="inputs"></div></div>
+  <div class="tab scroll hidden" id="tab-tv">
+    <div class="card hidden" id="npCard">
+      <div id="np"><img id="npArt" alt=""><div class="t"><div id="npApp"></div><div id="npTitle"></div><div id="npArtist"></div></div></div>
+      <div class="np-btns">
+        <button data-media="playpause" aria-label="Play or pause"><svg viewBox="0 0 24 24"><path id="npPlayIcon" d="M8 5v14l11-7z"/></svg></button>
+        <button data-media="stop" aria-label="Stop"><svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg></button>
+        <button data-media="open" aria-label="Open app"><svg viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></button>
+      </div>
+    </div>
+    <div class="duo">
+      <div class="card">
+        <div class="card-h"><span id="prayerZone">Prayer</span></div>
+        <div class="big" id="prayerBig"></div>
+        <div class="kv" id="prayerTimes"><span class="empty">Loading…</span></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><span>System</span></div>
+        <div class="kv" id="sysStats"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><span>Power</span></div>
+        <div id="powerOn" class="hidden">
+          <div class="grid2"><button id="sleepNow">Sleep</button><button id="rebootNow">Restart</button></div>
+          <div class="mini-h"><span>Timer</span><b id="sleepLeft"></b></div>
+          <div class="grid2" id="sleepChips">
+            <button data-min="30">30 min</button><button data-min="60">60 min</button><button data-min="90">90 min</button><button data-min="0">Off</button>
+          </div>
+        </div>
+        <div id="powerOff" class="muted">Turn on USB debugging on the TV for sleep, restart and a sleep timer.</div>
+      </div>
+      <div class="card">
+        <div class="card-h"><span>Inputs</span></div>
+        <div class="grid2" id="inputs"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><span>Send to TV</span>
+        <div class="seg2" id="sendMode"><button type="button" data-mode="msg" class="on">Message</button><button type="button" data-mode="url">Link</button></div>
+      </div>
+      <form class="inline" id="sendForm" autocomplete="off"><input id="sendText" maxlength="120" enterkeyhint="send" placeholder="Dinner's ready!"><button>Send</button></form>
+    </div>
+    <div class="card hidden" id="alertsCard">
+      <div class="card-h"><span>Notifications</span><button id="alertsClear">Clear all</button></div>
+      <div id="alertsList"></div>
+    </div>
+  </div>
 
   <div class="tab hidden" id="tab-files">
     <div class="files-bar">
@@ -191,11 +348,17 @@
     <div class="files" id="files"></div>
   </div>
 
+  <div class="tab scroll hidden" id="tab-settings">
+    <div id="settingsBox"><div class="empty">Loading…</div></div>
+    <input type="file" id="wallInput" accept="image/*" class="hidden">
+  </div>
+
   <nav>
     <button data-tab="remote" class="on"><svg viewBox="0 0 24 24"><path d="M15 9H9c-.55 0-1 .45-1 1v12c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V10c0-.55-.45-1-1-1zm-3 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM7.05 6.05l1.41 1.41C9.37 6.56 10.62 6 12 6s2.63.56 3.54 1.46l1.41-1.41C15.68 4.78 13.93 4 12 4s-3.68.78-4.95 2.05zM12 0C8.96 0 6.21 1.23 4.22 3.22l1.41 1.41C7.26 3.01 9.51 2 12 2s4.74 1.01 6.36 2.64l1.41-1.41C17.79 1.23 15.04 0 12 0z"/></svg>Remote</button>
+    <button data-tab="tv"><svg viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>TV</button>
     <button data-tab="apps"><svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>Apps</button>
-    <button data-tab="inputs"><svg viewBox="0 0 24 24"><path d="M21 3.01H3c-1.1 0-2 .9-2 2V9h2V4.99h18v14.03H3V15H1v4.01c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98v-14c0-1.11-.9-2-2-2zM11 16l4-4-4-4v3H1v2h10v3z"/></svg>Inputs</button>
     <button data-tab="files"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>Files</button>
+    <button data-tab="settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>Settings</button>
   </nav>
 </section>
 
@@ -206,6 +369,19 @@
     <button id="shotRetake">Retake</button>
     <button id="shotSave">Save</button>
     <button id="shotClose">Close</button>
+  </div>
+</div>
+
+<div id="zoneSheet" class="hidden">
+  <form class="inline" id="zoneForm" autocomplete="off"><input id="zoneSearch" type="search" enterkeyhint="search" placeholder="Search state, area or code"><button type="button" id="zoneClose">Close</button></form>
+  <div id="zoneList"></div>
+</div>
+
+<div id="appSheet" class="hidden">
+  <div class="panel">
+    <div class="name" id="appSheetName"></div>
+    <div id="appSheetBtns" style="display:flex;flex-direction:column;gap:10px"></div>
+    <button id="appSheetCancel">Cancel</button>
   </div>
 </div>
 
@@ -450,13 +626,95 @@ const TOOL_ICONS = {
 let appsData = [], dockEdit = null; // dockEdit: pkgs being edited, or null
 const DOCK_MAX = 5;
 
+let runningData = [], disabledData = [], showHidden = false;
 async function loadApps() {
   try {
     const r = await api("/api/apps");
     appsData = r.apps;
     renderApps();
   } catch (e) {}
+  loadRunning();
 }
+// Running apps and apps disabled from here are slower to read (dumpsys, memory over ADB), so they
+// fill in after the grid.
+async function loadRunning() {
+  try { runningData = (await api("/api/running")).apps; } catch (e) { runningData = []; }
+  try { disabledData = (await api("/api/apps/disabled")).apps; } catch (e) { disabledData = []; }
+  if (dockEdit === null) renderApps();
+}
+function runRow(r) {
+  const row = document.createElement("div"); row.className = "run";
+  const img = document.createElement("img"); img.alt = "";
+  img.src = "/api/banner?pkg=" + encodeURIComponent(r.pkg) + "&t=" + token;
+  const t = document.createElement("div"); t.className = "t";
+  const mb = r.memKb > 0 ? Math.round(r.memKb / 1024) + " MB · " : "";
+  t.innerHTML = `<div>${esc(r.label)}</div><span>${mb}${esc(r.hidden ? "Hidden" : r.state)}</span>`;
+  const close = document.createElement("button"); close.textContent = "Close";
+  close.onclick = async () => { buzz(); try { const x = await post("/api/running/close?pkg=" + encodeURIComponent(r.pkg)); flash(x.message || "Closed"); setTimeout(loadRunning, 800); } catch (e) { flash(e.message); } };
+  const hide = document.createElement("button"); hide.textContent = r.hidden ? "Show" : "Hide";
+  hide.onclick = async () => { buzz(); try { await post("/api/running/hide?pkg=" + encodeURIComponent(r.pkg) + "&on=" + (r.hidden ? 0 : 1)); loadRunning(); } catch (e) { flash(e.message); } };
+  row.append(img, t, hide);
+  if (!r.hidden) row.appendChild(close);
+  return row;
+}
+function renderRunning(box) {
+  const visible = runningData.filter((r) => !r.hidden), hidden = runningData.filter((r) => r.hidden);
+  if (!runningData.length) return;
+  box.appendChild(header("RUNNING · " + visible.length));
+  const runs = document.createElement("div"); runs.className = "runs";
+  visible.forEach((r) => runs.appendChild(runRow(r)));
+  if (hidden.length) {
+    const tog = document.createElement("button"); tog.className = "wide";
+    tog.textContent = (showHidden ? "Hide " : "Show ") + "hidden apps (" + hidden.length + ")";
+    tog.onclick = () => { showHidden = !showHidden; renderApps(); };
+    runs.appendChild(tog);
+    if (showHidden) hidden.forEach((r) => runs.appendChild(runRow(r)));
+  }
+  box.appendChild(runs);
+}
+function renderDisabled(box) {
+  const ready = adb === "ready";
+  if (disabledData.length) {
+    box.appendChild(header("DISABLED FROM THIS PHONE"));
+    const runs = document.createElement("div"); runs.className = "runs";
+    disabledData.forEach((d) => {
+      const row = document.createElement("div"); row.className = "run";
+      const t = document.createElement("div"); t.className = "t"; t.innerHTML = `<div>${esc(d.label)}</div><span>${esc(d.pkg)}</span>`;
+      const en = document.createElement("button"); en.textContent = "Enable";
+      en.onclick = async () => { buzz(); try { await post("/api/apps/enable?pkg=" + encodeURIComponent(d.pkg)); flash(d.label + " is back"); loadApps(); } catch (e) { flash(e.message); } };
+      row.append(t, en); runs.appendChild(row);
+    });
+    box.appendChild(runs);
+  }
+  if (ready) {
+    const b = document.createElement("button"); b.className = "wide"; b.textContent = "Free up cache (all apps)";
+    b.onclick = async () => { buzz(); flash("Freeing up cache…"); try { const x = await post("/api/apps/trimcaches"); flash("Freed " + x.freedMb + " MB"); } catch (e) { flash(e.message); } };
+    box.appendChild(b);
+  }
+}
+// Long-press (or right-click) on an app: open, dock, force close, disable.
+function appMenu(a) {
+  const dock = appsData.filter((x) => x.dock).map((x) => x.pkg), inDock = dock.includes(a.pkg);
+  const running = runningData.some((r) => r.pkg === a.pkg);
+  const items = [["Open on TV", async () => { await post("/api/open?pkg=" + encodeURIComponent(a.pkg)); flash("Opening " + a.label + "…"); }]];
+  if (inDock) items.push(["Remove from dock", async () => { await post("/api/dock", { pkgs: dock.filter((p) => p !== a.pkg) }); flash("Removed from the dock"); loadApps(); }]);
+  else if (dock.length < DOCK_MAX) items.push(["Add to dock", async () => { await post("/api/dock", { pkgs: dock.concat(a.pkg) }); flash("Added to the dock"); loadApps(); }]);
+  if (running) items.push(["Force close", async () => { const x = await post("/api/running/close?pkg=" + encodeURIComponent(a.pkg)); flash(x.message || "Closed"); setTimeout(loadRunning, 800); }]);
+  if (adb === "ready") items.push(["Disable app", async () => {
+    if (!confirm("Disable " + a.label + "? It disappears from the TV until you enable it again (Apps → Disabled from this phone).")) return;
+    await post("/api/apps/disable?pkg=" + encodeURIComponent(a.pkg)); flash(a.label + " disabled"); loadApps();
+  }, "danger"]);
+  $("appSheetName").textContent = a.label;
+  const box = $("appSheetBtns"); box.innerHTML = "";
+  items.forEach(([label, fn, cls]) => {
+    const b = document.createElement("button"); b.textContent = label; if (cls) b.className = cls;
+    b.onclick = async () => { $("appSheet").classList.add("hidden"); buzz(); try { await fn(); } catch (e) { flash(e.message); } };
+    box.appendChild(b);
+  });
+  $("appSheet").classList.remove("hidden");
+}
+$("appSheetCancel").onclick = () => $("appSheet").classList.add("hidden");
+$("appSheet").onclick = (e) => { if (e.target === $("appSheet")) $("appSheet").classList.add("hidden"); };
 
 function appCard(a, tools, pos) {
   const b = document.createElement("button"); b.className = "app card";
@@ -476,7 +734,15 @@ function appCard(a, tools, pos) {
     });
     b.appendChild(t);
   } else {
-    b.onclick = async () => { buzz(); try { await post("/api/open?pkg=" + encodeURIComponent(a.pkg)); flash("Opening " + a.label + "…"); setTimeout(refreshState, 1200); } catch (e) { flash(e.message); } };
+    let timer = null, long = false;
+    const cancel = () => clearTimeout(timer);
+    b.addEventListener("pointerdown", () => { long = false; timer = setTimeout(() => { long = true; buzz(); appMenu(a); }, 500); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, cancel));
+    b.oncontextmenu = (e) => { e.preventDefault(); if (!long) { long = true; appMenu(a); } };
+    b.onclick = async () => {
+      if (long) { long = false; return; }
+      buzz(); try { await post("/api/open?pkg=" + encodeURIComponent(a.pkg)); flash("Opening " + a.label + "…"); setTimeout(refreshState, 1200); } catch (e) { flash(e.message); }
+    };
   }
   return b;
 }
@@ -492,6 +758,7 @@ function renderApps() {
   const box = $("apps"); box.innerHTML = "";
   const byPkg = {}; appsData.forEach((a) => byPkg[a.pkg] = a);
   const editing = dockEdit !== null;
+  if (!editing) renderRunning(box);
   const dockPkgs = editing ? dockEdit : appsData.filter((a) => a.dock).map((a) => a.pkg);
 
   const btn = document.createElement("button");
@@ -529,13 +796,14 @@ function renderApps() {
       ? () => flash("The dock holds " + DOCK_MAX + " apps. Remove one first.")
       : () => { dockEdit.push(a.pkg); renderApps(); }]]) : appCard(a));
   });
+  if (!editing) renderDisabled(box);
 }
 async function loadInputs() {
   try {
     const r = await api("/api/inputs");
     const box = $("inputs"); box.innerHTML = "";
     r.inputs.forEach((i) => {
-      const b = document.createElement("button"); b.className = "card"; b.textContent = i.label;
+      const b = document.createElement("button"); b.textContent = i.label;
       b.onclick = async () => { buzz(); try { await post("/api/input?i=" + i.i); flash("Switching to " + i.label + "…"); setTimeout(refreshState, 1200); } catch (e) { flash(e.message); } };
       box.appendChild(b);
     });
@@ -544,10 +812,128 @@ async function loadInputs() {
 
 document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
-  ["remote", "apps", "inputs", "files"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
+  ["remote", "tv", "apps", "files", "settings"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
+  if (b.dataset.tab === "tv") { loadDashboard(); loadInputs(); }
   if (b.dataset.tab === "apps") loadApps();
   if (b.dataset.tab === "files") loadFiles(filesPath);
+  if (b.dataset.tab === "settings") loadSettings();
 }));
+
+// ---------------------------------------------------------------- TV tab
+// One call returns Now Playing, prayer times, the System card and the bell; refreshed every 3 s
+// while the tab is open and the page is in front. The prayer countdown ticks locally.
+const tvOpen = () => !$("tab-tv").classList.contains("hidden") && !document.hidden;
+let prayerNextAt = 0, prayerNextName = "", prayerNextTime = "", prayerNextTomorrow = false;
+const gb = (b) => (b / 1073741824).toFixed(1);
+function ago(ms) {
+  const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  return m < 1 ? "now" : m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d";
+}
+async function loadDashboard() {
+  let d;
+  try { d = await api("/api/dashboard"); } catch (e) { return; }
+  // Now Playing
+  const np = d.nowPlaying;
+  $("npCard").classList.toggle("hidden", !np);
+  if (np) {
+    $("npArt").src = "/api/banner?pkg=" + encodeURIComponent(np.pkg) + "&t=" + encodeURIComponent(token);
+    $("npApp").textContent = np.app + " · " + np.state;
+    $("npTitle").textContent = np.title;
+    $("npArtist").textContent = np.artist;
+    $("npPlayIcon").setAttribute("d", np.playing ? "M6 19h4V5H6v14zm8-14v14h4V5h-4z" : "M8 5v14l11-7z");
+  }
+  // Prayer times
+  const p = d.prayer;
+  $("prayerZone").textContent = "Prayer · " + p.zone;
+  $("prayerZone").title = p.area;
+  if (!p.times) { $("prayerTimes").innerHTML = '<span class="muted">Not downloaded yet (the TV fetches it when online).</span>'; prayerNextAt = 0; }
+  else {
+    const nextIdx = p.next && !p.next.tomorrow ? p.next.index : -1;
+    $("prayerTimes").innerHTML = p.times.map((t, i) =>
+      `<div class="${i === nextIdx ? "next" : ""}"><span>${esc(t.name)}</span><b>${esc(t.time)}</b></div>`).join("");
+    prayerNextAt = p.next ? p.next.at : 0; prayerNextName = p.next ? p.next.name : "";
+    prayerNextTime = p.next ? p.next.time : ""; prayerNextTomorrow = !!(p.next && p.next.tomorrow);
+  }
+  tickPrayer();
+  // System
+  const s = d.system;
+  const up = s.uptimeMin >= 1440 ? Math.floor(s.uptimeMin / 1440) + "d " + Math.floor(s.uptimeMin % 1440 / 60) + "h"
+    : Math.floor(s.uptimeMin / 60) + "h " + s.uptimeMin % 60 + "m";
+  $("sysStats").innerHTML = [
+    ["CPU", s.cores ? s.cpuGhz.toFixed(2) + " GHz" : "—"],
+    ["RAM", Math.round(s.ramUsed / s.ramTotal * 100) + "% · " + Math.round(s.ramTotal / 1073741824) + "G"],
+    ["Disk", Math.round(s.diskUsed / s.diskTotal * 100) + "% · " + Math.round(s.diskTotal / 1e9) + "G"],
+    ["IP", s.ip || "—"],
+    [s.network === "LAN" ? "LAN" : "Wi-Fi", s.network === "Offline" ? "Offline" : s.rssi != null ? s.rssi + " dBm" : "On"],
+    ["Up", up],
+  ].map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("");
+  // Power and sleep timer (USB debugging)
+  const ready = d.adb === "ready";
+  $("powerOn").classList.toggle("hidden", !ready);
+  $("powerOff").classList.toggle("hidden", ready);
+  sleepAt = d.sleepAt || 0;
+  tickSleep();
+  // Bell
+  const a = d.alerts.list;
+  $("alertsCard").classList.toggle("hidden", !a.length);
+  $("alertsList").innerHTML = "";
+  a.forEach((al) => {
+    const row = document.createElement("div"); row.className = "alert";
+    row.innerHTML = `<div class="t"><div>${esc(al.title)}</div>${al.text ? `<span>${esc(al.text)}</span>` : ""}</div><time>${ago(al.time)}</time>`;
+    row.onclick = async () => { buzz(); try { await post("/api/alerts/open?id=" + encodeURIComponent(al.id)); flash(al.openable ? "Opened on the TV" : "Cleared"); loadDashboard(); } catch (e) { flash(e.message); } };
+    $("alertsList").appendChild(row);
+  });
+}
+let sleepAt = 0;
+function tickSleep() {
+  if (!sleepAt) { $("sleepLeft").textContent = ""; return; }
+  const m = Math.max(0, Math.ceil((sleepAt - Date.now()) / 60000));
+  const at = new Date(sleepAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  $("sleepLeft").textContent = m + " min left"; $("sleepLeft").title = "Off at " + at;
+}
+$("sleepNow").onclick = async () => { buzz(); try { await post("/api/power?a=sleep"); flash("The TV is going to sleep."); } catch (e) { flash(e.message); } };
+$("rebootNow").onclick = async () => {
+  if (!confirm("Restart the TV now? Whatever is playing stops.")) return;
+  buzz(); try { await post("/api/power?a=reboot"); flash("Restarting the TV… reconnect in about a minute."); } catch (e) { flash(e.message); }
+};
+document.querySelectorAll("#sleepChips button").forEach((b) => b.onclick = async () => {
+  buzz();
+  try { await post("/api/sleeptimer?min=" + b.dataset.min); flash(b.dataset.min === "0" ? "Sleep timer off" : "The TV turns off in " + b.dataset.min + " min"); loadDashboard(); }
+  catch (e) { flash(e.message); }
+});
+function tickPrayer() {
+  if (!prayerNextAt) { $("prayerBig").textContent = ""; return; }
+  const m = Math.max(0, Math.ceil((prayerNextAt - Date.now()) / 60000));
+  $("prayerBig").innerHTML = esc(prayerNextName + " " + prayerNextTime)
+    + "<small>" + (prayerNextTomorrow ? "tomorrow · " : "") + "in " + (m >= 60 ? Math.floor(m / 60) + "h " + m % 60 + "m" : m + "m") + "</small>";
+}
+setInterval(() => { if (tvOpen()) loadDashboard(); }, 3000);
+setInterval(() => { if (tvOpen()) { tickPrayer(); tickSleep(); } }, 15000);
+document.querySelectorAll("[data-media]").forEach((b) => b.onclick = async () => {
+  buzz();
+  try { await post("/api/media?a=" + b.dataset.media); if (b.dataset.media === "open") flash("Opening on the TV…"); setTimeout(loadDashboard, 700); }
+  catch (e) { flash(e.message); }
+});
+$("alertsClear").onclick = async () => { buzz(); try { await post("/api/alerts/clear"); loadDashboard(); } catch (e) { flash(e.message); } };
+// Send to TV: one field, as a message (a box on the TV until OK) or a link to open.
+let sendMode = "msg";
+document.querySelectorAll("#sendMode button").forEach((b) => b.onclick = () => {
+  sendMode = b.dataset.mode;
+  document.querySelectorAll("#sendMode button").forEach((x) => x.classList.toggle("on", x === b));
+  const f = $("sendText"), url = sendMode === "url";
+  f.type = url ? "url" : "text"; f.inputMode = url ? "url" : "text"; f.enterKeyHint = url ? "go" : "send";
+  f.maxLength = url ? 2000 : 120; f.placeholder = url ? "Paste a YouTube or web link" : "Dinner's ready!";
+  f.value = ""; f.focus();
+});
+$("sendForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const v = $("sendText").value.trim(); if (!v) return;
+  try {
+    if (sendMode === "url") { await post("/api/openurl", { url: v }); flash("Opening on the TV…"); }
+    else { await post("/api/message", { text: v }); flash("Shown on the TV until someone presses OK"); }
+    $("sendText").value = "";
+  } catch (err) { flash(err.message); }
+};
 
 // ---------------------------------------------------------------- files
 const ICONS = {
@@ -647,10 +1033,10 @@ $("uploadInput").onchange = async () => {
   if (ok) flash("Uploaded " + ok + " file" + (ok > 1 ? "s" : "") + ".");
   if (filesPath === dir) loadFiles(dir);
 };
-function uploadOne(dir, file, onPct) {
+function uploadOne(dir, file, onPct, name) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/files/upload?dir=" + encodeURIComponent(dir) + "&name=" + encodeURIComponent(file.name));
+    xhr.open("POST", "/api/files/upload?dir=" + encodeURIComponent(dir) + "&name=" + encodeURIComponent(name || file.name));
     xhr.setRequestHeader("X-Token", token);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onPct(Math.round(e.loaded * 100 / e.total)); };
@@ -659,6 +1045,197 @@ function uploadOne(dir, file, onPct) {
     onPct(0);
     xhr.send(file);
   });
+}
+
+// ---------------------------------------------------------------- Settings tab
+// Rendered from the schema the TV sends: the TV's own Settings, minus the phone remote's switch
+// and "Forget all phones". Each change is saved on the TV at once, and the TV answers with the
+// updated schema.
+let settingsData = null, wallData = null, zonesData = null, picksOpen = false, wallTimer = null;
+const settingsOpen = () => !$("tab-settings").classList.contains("hidden") && !document.hidden;
+function settingValue(key) {
+  for (const c of settingsData ? settingsData.categories : []) for (const r of c.rows) if (r.key === key) return r.value;
+  return null;
+}
+async function loadSettings() {
+  try { settingsData = await api("/api/settings"); renderSettings(); } catch (e) { flash(e.message); }
+  loadWallpapers();
+}
+async function saveSetting(key, value, extra) {
+  buzz();
+  try { settingsData = await post("/api/settings", Object.assign({ key, value }, extra)); renderSettings(); return true; }
+  catch (e) { flash(e.message); return false; }
+}
+function renderSettings() {
+  const box = $("settingsBox"); box.innerHTML = "";
+  settingsData.categories.forEach((c) => {
+    const card = document.createElement("div"); card.className = "card set";
+    card.innerHTML = `<div class="card-h"><span>${esc(c.title)}</span></div>`;
+    c.rows.forEach((r) => card.appendChild(settingRow(r)));
+    box.appendChild(card);
+  });
+  renderWalls();
+}
+function settingRow(r) {
+  const row = document.createElement("div"); row.className = "srow";
+  const t = document.createElement("div"); t.className = "t";
+  t.innerHTML = `<div>${esc(r.label)}</div>${r.sub ? `<span>${esc(r.sub)}</span>` : ""}`;
+  row.appendChild(t);
+  if (r.type === "toggle") {
+    const sw = document.createElement("button"); sw.className = "switch" + (r.value ? " on" : "");
+    sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", r.value); sw.setAttribute("aria-label", r.label);
+    row.onclick = () => saveSetting(r.key, !r.value);
+    row.appendChild(sw);
+  } else if (r.type === "choice") {
+    row.classList.add("stack");
+    const seg = document.createElement("div"); seg.className = "chips seg";
+    r.options.forEach(([v, name]) => {
+      const b = document.createElement("button"); b.textContent = name; if (v === r.value) b.className = "on";
+      b.onclick = () => { if (v !== r.value) saveSetting(r.key, v); };
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+  } else if (r.type === "zone") {
+    const b = document.createElement("button"); b.textContent = r.value; b.onclick = openZones;
+    row.appendChild(b);
+  } else if (r.type === "action") {
+    const b = document.createElement("button"); b.textContent = "Play";
+    b.onclick = async () => { if (await saveSetting(r.key, true)) flash("Playing the azan on the TV"); };
+    row.appendChild(b);
+  } else if (r.type === "apps") {
+    const n = document.createElement("b"); n.textContent = r.value.length === 1 ? "1 app" : r.value.length + " apps";
+    const b = document.createElement("button"); b.textContent = picksOpen ? "Done" : "Choose";
+    row.append(n);
+    b.onclick = async () => {
+      buzz(); picksOpen = !picksOpen;
+      if (picksOpen && !appsData.length) try { appsData = (await api("/api/apps")).apps; } catch (e) { flash(e.message); }
+      renderSettings();
+    };
+    row.appendChild(b);
+    if (picksOpen) {
+      const picks = document.createElement("div"); picks.className = "picks";
+      // Apps already left out first, then A–Z, as on the TV.
+      const seen = new Set(), list = appsData.filter((a) => !seen.has(a.pkg) && seen.add(a.pkg));
+      list.sort((x, y) => (r.value.includes(y.pkg) - r.value.includes(x.pkg)) || x.label.localeCompare(y.label));
+      list.forEach((a) => {
+        const on = r.value.includes(a.pkg);
+        const p = document.createElement("button"); p.className = "pick" + (on ? " on" : "");
+        p.innerHTML = `<span>${esc(a.label)}</span><i></i>`;
+        p.onclick = () => saveSetting(r.key, a.pkg, { on: !on });
+        picks.appendChild(p);
+      });
+      row.appendChild(picks);
+    }
+  } else if (r.type === "wallpaper") {
+    row.classList.add("stack");
+    const name = document.createElement("b"); name.textContent = r.name;
+    const grid = document.createElement("div"); grid.className = "walls"; grid.id = "walls";
+    row.append(name, grid);
+  }
+  return row;
+}
+
+// Wallpapers: a thumbnail grid in the TV's order, then "Your photo", which uploads a picture to the
+// TV's Wallpapers folder and sets it. Built-ins still downloading on the TV fill in as they land.
+const UPLOAD_ICON = "M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z";
+async function loadWallpapers() {
+  clearTimeout(wallTimer);
+  try { wallData = await api("/api/wallpapers"); renderWalls(); } catch (e) { return; }
+  if (wallData.pending) wallTimer = setTimeout(() => { if (settingsOpen()) loadWallpapers(); }, 3000);
+}
+function renderWalls() {
+  const grid = $("walls"); if (!grid || !wallData) return;
+  const current = settingValue("wallpaper") || wallData.current;
+  grid.innerHTML = "";
+  wallData.items.forEach((w) => {
+    const b = document.createElement("button"); b.className = "wall" + (w.id === current ? " on" : "");
+    const art = document.createElement("div"); art.className = "art";
+    if (w.thumb) {
+      const img = document.createElement("img"); img.alt = ""; img.loading = "lazy";
+      img.src = "/api/wallpaper/thumb?id=" + encodeURIComponent(w.id) + "&v=" + w.thumb + "&t=" + encodeURIComponent(token);
+      art.appendChild(img);
+    }
+    const label = document.createElement("span"); label.textContent = w.name; label.title = w.sub;
+    b.append(art, label);
+    b.onclick = async () => { if (w.id !== current && await saveSetting("wallpaper", w.id)) flash(w.name + " is on the TV"); };
+    grid.appendChild(b);
+  });
+  const add = document.createElement("button"); add.className = "wall";
+  add.innerHTML = `<div class="art">${svg(UPLOAD_ICON)}</div><span>Your photo</span>`;
+  add.onclick = () => { buzz(); $("wallInput").click(); };
+  grid.appendChild(add);
+}
+// Phone photos are 12 MP and may be rotated by EXIF (which the TV ignores): redraw as an upright
+// JPEG no bigger than 1920 px first. Smaller to send, and quicker for the TV to decode.
+async function shrink(file) {
+  if (!window.createImageBitmap) return null;
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 1920 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise((res) => c.toBlob(res, "image/jpeg", 0.88));
+}
+$("wallInput").onchange = async () => {
+  const f = $("wallInput").files[0]; $("wallInput").value = "";
+  if (!f || !wallData) return;
+  let blob = f, name = f.name;
+  try { const j = await shrink(f); if (j) { blob = j; name = (f.name.replace(/\.[^.]+$/, "") || "photo") + ".jpg"; } } catch (e) {}
+  if (!/\.(jpe?g|png|webp)$/i.test(name)) { flash("Use a JPEG, PNG or WebP picture."); return; }
+  try {
+    const r = await uploadOne(wallData.folder, blob, (pct) => flash("Uploading " + name + " · " + pct + "%"), name);
+    await loadWallpapers();
+    if (await saveSetting("wallpaper", "file:" + r.name)) flash(r.name + " is on the TV");
+  } catch (e) { flash(e.message); }
+};
+
+// Prayer zone: a searchable list of the 60 JAKIM zones.
+async function openZones() {
+  buzz();
+  if (!zonesData) try { zonesData = (await api("/api/settings/zones")).zones; } catch (e) { flash(e.message); return; }
+  $("zoneSearch").value = "";
+  renderZones();
+  $("zoneSheet").classList.remove("hidden");
+  const on = $("zoneList").querySelector(".on"); if (on) on.scrollIntoView({ block: "center" });
+}
+function renderZones() {
+  const q = $("zoneSearch").value.trim().toLowerCase(), cur = settingValue("prayer_zone");
+  const list = $("zoneList"); list.innerHTML = "";
+  zonesData.filter((z) => !q || (z.state + " " + z.code + " " + z.area).toLowerCase().includes(q)).forEach((z) => {
+    const b = document.createElement("button"); b.className = "zone" + (z.code === cur ? " on" : "");
+    b.innerHTML = `<div><b>${esc(z.code)}</b>${esc(z.state)}</div><span>${esc(z.area)}</span>`;
+    b.onclick = async () => { if (await saveSetting("prayer_zone", z.code)) { $("zoneSheet").classList.add("hidden"); flash("Prayer zone: " + z.code); } };
+    list.appendChild(b);
+  });
+  if (!list.children.length) list.innerHTML = '<div class="empty">No zone matches.</div>';
+}
+$("zoneSearch").addEventListener("input", renderZones);
+$("zoneForm").onsubmit = (e) => { e.preventDefault(); $("zoneSearch").blur(); };
+$("zoneClose").onclick = () => $("zoneSheet").classList.add("hidden");
+
+// ---------------------------------------------------------------- keyboard
+// In normal mode the browser shrinks the page for the on-screen keyboard and scrolls the focused
+// field above it. In full screen Android draws the keyboard over the page without resizing it,
+// so fields near the bottom (Send to TV, the keyboard field) end up behind it. Where the browser
+// can tell us where the keyboard is (Chrome's VirtualKeyboard API; else the visual viewport), lift
+// the page by only as much as the keyboard covers it (some phones still shrink the page part of
+// the way in full screen), hide the tab bar while typing, and bring the field just into view.
+let kbRect = null;
+function setKb(h) {
+  h = Math.max(0, Math.round(h));
+  document.documentElement.style.setProperty("--kb", h + "px");
+  document.body.classList.toggle("kb", h > 80);
+  const f = document.activeElement;
+  if (h > 80 && f && f.matches("input")) setTimeout(() => f.scrollIntoView({ block: "nearest", behavior: "smooth" }), 60);
+}
+const kbCover = () => kbRect && kbRect.height > 0 ? innerHeight - kbRect.y : 0;
+if (navigator.virtualKeyboard) {
+  navigator.virtualKeyboard.overlaysContent = true; // same handling in normal and full screen
+  navigator.virtualKeyboard.addEventListener("geometrychange", (e) => { kbRect = e.target.boundingRect; setKb(kbCover()); });
+  addEventListener("resize", () => { if (kbRect) setKb(kbCover()); });
+} else if (window.visualViewport && fsSupported) {
+  // Other browsers with full screen (Firefox): only while full screen, where nothing else helps.
+  visualViewport.addEventListener("resize", () => setKb(isFull() ? innerHeight - visualViewport.height - visualViewport.offsetTop : 0));
 }
 
 show(token ? "main" : "pair");

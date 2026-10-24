@@ -1,26 +1,15 @@
 package my.rafhan.app.tvhome;
 
-import android.app.ActivityManager;
-import android.app.usage.StorageStatsManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.database.ContentObserver;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.net.ConnectivityManager;
-import android.net.LinkAddress;
-import android.net.LinkProperties;
 import android.net.Network;
-import android.net.NetworkCapabilities;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.Build;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.StatFs;
-import android.os.storage.StorageManager;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -33,8 +22,6 @@ import android.widget.TextView;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.InputStreamReader;
-import java.net.Inet4Address;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 
@@ -58,8 +45,6 @@ final class SystemPanel {
     private final float dp;
     private final Executor worker;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ActivityManager am;
-    private final ConnectivityManager cm;
     private final Cell cpu, ram, disk, uptime, ip, signal, dns, adb;
     private final int cores;
     private final long maxKhz;
@@ -80,8 +65,6 @@ final class SystemPanel {
         this.ctx = ctx;
         this.worker = worker;
         dp = ctx.getResources().getDisplayMetrics().density;
-        am = ctx.getSystemService(ActivityManager.class);
-        cm = ctx.getSystemService(ConnectivityManager.class);
         cores = Runtime.getRuntime().availableProcessors();
         maxKhz = readLong("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq");
 
@@ -147,27 +130,16 @@ final class SystemPanel {
     // ---------------------------------------------------------------- sampled
 
     private void refreshFast() {
-        long sum = 0;
-        int online = 0;
-        for (int c = 0; c < cores; c++) {
-            long khz = readLong("/sys/devices/system/cpu/cpu" + c + "/cpufreq/scaling_cur_freq");
-            if (khz > 0) {
-                sum += khz;
-                online++;
-            }
-        }
+        double[] clock = SysInfo.cpu(cores);
+        int online = (int) clock[1];
         if (online > 0) {
-            cpu.set(fmt2(sum / (double) online / 1e6) + " GHz", "CPU · " + online + " CORE", TEXT, -1);
+            cpu.set(fmt2(clock[0]) + " GHz", "CPU · " + online + " CORE", TEXT, -1);
         } else {
             cpu.set("—", "CPU", TEXT, -1);
         }
 
-        // Installed RAM, not what the kernel gets: the firmware keeps ~250 MB for video and the
-        // GPU, so a 2 GB TV reports 1.8 GB. That reserve counts as used, like Settings does for
-        // the system partitions on the disk.
-        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
-        am.getMemoryInfo(mi);
-        long total = installedRam(mi.totalMem), used = total - mi.availMem;
+        long[] mem = SysInfo.ram(ctx); // installed RAM; the firmware's video reserve counts as used
+        long used = mem[0], total = mem[1];
         float f = total > 0 ? used / (float) total : 0;
         ram.set(Math.round(f * 100) + "%", "RAM " + gb(used) + "/" + gbRound(total / 1073741824.0) + "G", TEXT, f);
 
@@ -176,73 +148,30 @@ final class SystemPanel {
         uptime.set(d > 0 ? d + "d " + h + "h" : h + "h " + m + "m", "UPTIME", TEXT, -1);
     }
 
-    /**
-     * The whole storage chip, as Settings shows it (16 GB), not just the /data partition
-     * (11.4 GB): the system partitions count as used. Sizes are decimal GB, like Settings.
-     */
+    /** The whole storage chip, as Settings shows it (system partitions count as used); decimal GB. */
     private void refreshDisk() {
-        long total, free;
-        try {
-            StorageStatsManager ssm = ctx.getSystemService(StorageStatsManager.class);
-            total = ssm.getTotalBytes(StorageManager.UUID_DEFAULT);
-            free = ssm.getFreeBytes(StorageManager.UUID_DEFAULT);
-        } catch (Exception e) {
-            StatFs fs = new StatFs(Environment.getDataDirectory().getPath());
-            total = fs.getTotalBytes();
-            free = fs.getAvailableBytes();
-        }
-        long used = total - free;
+        long[] d = SysInfo.disk(ctx);
+        long used = d[0], total = d[1];
         float f = total > 0 ? used / (float) total : 0;
         disk.set(Math.round(f * 100) + "%", "DISK " + fmt1(used / 1e9) + "/" + gbRound(total / 1e9) + "G", TEXT, f);
-    }
-
-    /** Rounds what the kernel reports up to the nearest size RAM is sold in. */
-    private static long installedRam(long reported) {
-        double g = reported / 1073741824.0;
-        for (double size : new double[] {0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32}) {
-            if (g <= size) return (long) (size * 1073741824L);
-        }
-        return reported;
     }
 
     // ---------------------------------------------------------------- event driven
 
     void refreshNetwork() {
-        Network net = cm.getActiveNetwork();
-        NetworkCapabilities nc = net == null ? null : cm.getNetworkCapabilities(net);
-        LinkProperties lp = net == null ? null : cm.getLinkProperties(net);
-        boolean wifi = nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
-        boolean eth = nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET);
-
-        String addr = null;
-        if (lp != null) {
-            for (LinkAddress la : lp.getLinkAddresses()) {
-                if (la.getAddress() instanceof Inet4Address && !la.getAddress().isLoopbackAddress()) {
-                    addr = la.getAddress().getHostAddress();
-                    break;
-                }
-            }
-        }
+        SysInfo.Net n = SysInfo.network(ctx);
         // The Wi-Fi button is icon-only, so the network's name lives here.
-        NetState ns = NetState.read(ctx);
-        String where = eth ? "LAN" : wifi && ns.name != null ? ns.name : wifi ? "WI-FI" : "OFFLINE";
-        ip.set(addr != null ? addr : "—", "IP · " + where,
-                addr != null ? TEXT : WARN, -1);
-
-        if (wifi) {
-            WifiInfo wi = ctx.getApplicationContext().getSystemService(WifiManager.class).getConnectionInfo();
-            int rssi = wi == null ? -127 : wi.getRssi();
-            int color = rssi >= -65 ? TEXT : rssi >= -75 ? WARN : BAD;
-            signal.set(rssi > -127 ? rssi + " dBm" : "—",
-                    wi != null && wi.getLinkSpeed() > 0 ? wi.getLinkSpeed() + " MBPS" : "SIGNAL", color, -1);
+        String where = n.ethernet ? "LAN" : n.wifi && n.name != null ? n.name : n.wifi ? "WI-FI" : "OFFLINE";
+        ip.set(n.ip != null ? n.ip : "—", "IP · " + where, n.ip != null ? TEXT : WARN, -1);
+        if (n.wifi) {
+            int color = n.rssi >= -65 ? TEXT : n.rssi >= -75 ? WARN : BAD;
+            signal.set(n.rssi > -127 ? n.rssi + " dBm" : "—", n.linkMbps > 0 ? n.linkMbps + " MBPS" : "SIGNAL", color, -1);
         } else {
-            signal.set(eth ? "Wired" : "—", "LINK", TEXT, -1);
+            signal.set(n.ethernet ? "Wired" : "—", "LINK", TEXT, -1);
         }
-
-        String host = lp == null ? null : lp.getPrivateDnsServerName();
-        if (!TextUtils.isEmpty(host)) {
-            dns.set(host.contains("adguard") ? "AdGuard" : host, "DNS · DoT", GOOD, -1);
-        } else if (lp != null && lp.isPrivateDnsActive()) {
+        if (n.dnsHost != null) {
+            dns.set(n.dnsHost.contains("adguard") ? "AdGuard" : n.dnsHost, "DNS · DoT", GOOD, -1);
+        } else if (n.dnsAuto) {
             dns.set("Auto", "DNS · TLS", TEXT, -1);
         } else {
             dns.set("System", "DNS", TEXT, -1);
@@ -250,18 +179,16 @@ final class SystemPanel {
     }
 
     private void refreshAdb() {
-        boolean on = Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.ADB_ENABLED, 0) == 1;
-        if (!on) {
+        if (!SysInfo.adbOn(ctx)) {
             adb.set("OFF", "USB DEBUG", GOOD, -1);
             return;
         }
         adb.set("ON", "USB DEBUG", WARN, -1);
         // Network ADB port: a system property, readable through getprop. Off the main thread.
         worker.execute(() -> {
-            String port = getprop("service.adb.tcp.port");
+            String port = SysInfo.adbPort();
             main.post(() -> {
-                boolean tcp = !port.isEmpty() && !port.equals("-1") && !port.equals("0");
-                adb.set(tcp ? "ON :" + port : "ON", "USB DEBUG", WARN, -1);
+                adb.set(!port.isEmpty() ? "ON :" + port : "ON", "USB DEBUG", WARN, -1);
             });
         });
     }
@@ -273,20 +200,6 @@ final class SystemPanel {
             return Long.parseLong(r.readLine().trim());
         } catch (Exception e) {
             return -1;
-        }
-    }
-
-    private static String getprop(String key) {
-        try {
-            Process p = new ProcessBuilder("/system/bin/getprop", key).redirectErrorStream(true).start();
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-                String line = r.readLine();
-                return line == null ? "" : line.trim();
-            } finally {
-                p.destroy();
-            }
-        } catch (Exception e) {
-            return "";
         }
     }
 

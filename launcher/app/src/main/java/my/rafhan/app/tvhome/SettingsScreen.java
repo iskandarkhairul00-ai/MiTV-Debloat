@@ -353,7 +353,7 @@ final class SettingsScreen {
 
     private void prayerRows(List<Row> out) {
         String zone = LauncherSettings.zone(ctx);
-        String[] z = zoneEntry(zone);
+        String[] z = RemoteSettings.zoneEntry(ctx, zone);
         Row r = new Row(PICKER, "Zone");
         r.sub = z != null ? z[0] + " · " + z[2] : "JAKIM e-solat zone";
         r.value = () -> zone;
@@ -398,7 +398,8 @@ final class SettingsScreen {
         out.add(w);
     }
 
-    private String wallpaperName(String choice) {
+    /** The name the wallpaper row shows (also the phone remote's). */
+    static String wallpaperName(String choice) {
         if (Wallpapers.CUSTOM.equals(choice)) return "Your picture";
         if (Wallpapers.BING.equals(choice)) return "Bing daily";
         if (choice.startsWith(Wallpapers.FILE)) return baseName(choice.substring(Wallpapers.FILE.length()));
@@ -657,7 +658,7 @@ final class SettingsScreen {
         return Wallpapers.FILE + f.getName() + "@" + f.lastModified();
     }
 
-    private static String baseName(String file) {
+    static String baseName(String file) {
         int dot = file.lastIndexOf('.');
         return dot > 0 ? file.substring(0, dot) : file;
     }
@@ -838,15 +839,6 @@ final class SettingsScreen {
     private static int indexOf(int[] values, int v) {
         for (int i = 0; i < values.length; i++) if (values[i] == v) return i;
         return 0;
-    }
-
-    /** {state, code, areas} for a zone code, or null. */
-    private String[] zoneEntry(String code) {
-        for (String e : ctx.getResources().getStringArray(R.array.prayer_zones)) {
-            String[] z = e.split("\\|", 3);
-            if (z[1].equals(code)) return z;
-        }
-        return null;
     }
 
     private static String label(PackageManager pm, String pkg) {

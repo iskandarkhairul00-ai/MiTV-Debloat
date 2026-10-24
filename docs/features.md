@@ -129,14 +129,24 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="tvremote.jpg" alt="Remote tab: touchpad, Back, Home, Play/Pause, volume, keyboard"></td>
-    <td align="center" width="33%"><img src="tvremote-applist.jpg" alt="Apps tab: dock apps, then all apps most used first"></td>
-    <td align="center" width="33%"><img src="tvremote-sendfile.jpg" alt="Files tab: TV storage with upload"></td>
+    <td align="center" width="33%"><img src="tvremote.jpg" alt="Remote tab: touchpad, Back, Home, Play/Pause, volume, screenshot, keyboard"></td>
+    <td align="center" width="33%"><img src="tvremote-tv.jpg" alt="TV tab: Now Playing, prayer times, system, power, inputs, send to TV"></td>
+    <td align="center" width="33%"><img src="tvremote-applist.jpg" alt="Apps tab: running apps with Hide and Close, then the dock"></td>
   </tr>
   <tr>
-    <td align="center"><b>Remote</b>: swipe to move, double-tap for OK, plus Back, Home, media, volume and typing</td>
-    <td align="center"><b>Apps</b>: the dock, then every app with the most used first. Tap to open on the TV</td>
+    <td align="center"><b>Remote</b>: swipe to move, double-tap for OK, plus Back, Home, media, volume, typing and screenshots</td>
+    <td align="center"><b>TV</b>: what's playing, prayer times, system, power and sleep timer, inputs, and Send to TV</td>
+    <td align="center"><b>Apps</b>: running apps, the dock, then every app with the most used first. Hold one for more</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="tvremote-sendfile.jpg" alt="Files tab: TV storage and the Wallpapers shortcut"></td>
+    <td align="center"><img src="tvremote-settings.jpg" alt="Settings tab: clock, cards, wallpaper dim and wallpaper thumbnails"></td>
+    <td></td>
+  </tr>
+  <tr>
     <td align="center"><b>Files</b>: browse the TV's storage, upload from the phone, open files on the TV</td>
+    <td align="center"><b>Settings</b>: the TV's Settings, with wallpaper thumbnails and a searchable zone list</td>
+    <td></td>
   </tr>
 </table>
 
@@ -145,7 +155,7 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 2. Type it on the phone. The phone keeps a token.
 3. After 5 wrong tries the PIN is voided and you ask for a new one.
 
-**Unpairing:** "Unpair this phone" at the bottom of the page.
+**Unpairing:** the broken-link button next to the TV's name.
 
 | Tab | Does | Works |
 |---|---|---|
@@ -155,9 +165,19 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 | Remote | Screenshot (only shown while USB debugging is on) | Captures whatever is on the TV and shows it on the phone; **Save** downloads the PNG, or press and hold it to save to Photos. DRM video (Netflix, etc.) comes out black |
 | Remote | Play/Pause | Whatever is playing (Netflix, YouTube, RadioStream…) |
 | Remote | Vol −, Mute, Vol + | Everywhere; shows the TV's volume bar |
-| Apps | Dock, then all apps most-used first; tap to open | Everywhere |
-| Inputs | HDMI 1–3, AV, Live TV | Everywhere |
+| TV | **Now Playing**: app, title and state, with Play/Pause, Stop and Open app | Everywhere |
+| TV | **Prayer times**: today's five, the next one highlighted with a countdown | Everywhere |
+| TV | **System**: CPU clock, RAM, storage, IP and network, Wi-Fi signal, uptime | Everywhere |
+| TV | **Notifications** (only when there are some): what the bell shows. Tap one to open it on the TV; **Clear all** | Everywhere |
+| TV | **Power**: Sleep now, Restart (asks first), and a sleep timer (30, 60 or 90 min, or Off) | **USB debugging on** |
+| TV | **Send to TV → Message**: up to 120 characters, in a box over any app (like the pairing PIN) that stays until someone presses **OK** or **Back**, on the TV remote or the phone. Volume still works while it shows | Everywhere |
+| TV | **Send to TV → Link**: YouTube links open in the YouTube app, Netflix links in Netflix, other links in a browser if the TV has one | Everywhere |
+| TV | **Inputs**: HDMI 1–3, AV, Live TV | Everywhere |
+| Apps | **Running**: what's running, its memory and state; **Close** force-closes, **Hide** hides it (here and on the TV) | Everywhere |
+| Apps | Dock, then all apps most-used first. Tap to open; **hold** (or right-click) for Open, Add to/Remove from dock, Force close and Disable | Disable needs **USB debugging on** |
+| Apps | **Disabled from this phone**: Enable brings an app back. **Free up cache (all apps)** clears every app's cache | **USB debugging on** |
 | Files | Browse internal storage and USB drives. Upload from the phone (with progress), download to the phone, open a video, photo or song on the TV | Everywhere |
+| Settings | The TV's Settings from the phone: clock, cards, wallpaper dim, **wallpaper** (thumbnails, or upload a photo and set it in one go), prayer **zone** (searchable), azan, reminder, **Play azan now**, Most used week and Leave out, notifications. Changes show on the TV straight away | Everywhere |
 
 **How it works:**
 - **No ADB, so USB debugging can be switched off.**
@@ -180,6 +200,21 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 - **After a reboot** network ADB (port 5555) may be off again. Turn it back on to get in-app D-pad.
 - **Cost:** each virtual device is a small `hid` process, about 20 MB. The keypad is created on the first phone-remote key press inside an app and removed after 5 minutes without one; the keyboard only exists while typing (1 minute idle).
 - **Security:** while debugging is on the launcher has ADB shell access, the same power network ADB already gives anyone on your Wi-Fi. Only paired phones can use it.
+
+**Power and sleep timer:**
+- **Sleep** presses the TV's own sleep key (`input keyevent KEYCODE_SLEEP`); **Restart** runs `reboot`. Both go through the launcher's ADB connection, so they only show while USB debugging is on.
+- **Sleep timer:** a banner on the TV when it's set and one minute before, then the TV sleeps. Setting a new time replaces the old one; it's forgotten if the launcher restarts.
+
+**App manager (USB debugging on):**
+- **Disable** runs `pm disable-user --user 0`, so the app is hidden and can't run, but nothing is uninstalled and its data stays. **Enable** reverses it.
+- **Never disabled:** this launcher and any other home-screen app, the TV's keyboard, Settings, the system UI, Play Store and Play Services, and the TV-input packages. Only apps with a launcher icon are offered.
+- **Logged** on the TV in `Android/data/my.rafhan.app.tvhome/files/disabled-by-remote.txt`. `scripts/restore.sh` reads it and re-enables those apps too.
+- **Free up cache** runs `pm trim-caches`, which empties every app's cache (Android 10 doesn't let the shell clear one app's). No "clear data": that would sign you out of apps.
+
+**Settings tab:**
+- It's drawn from a list the TV sends (`GET /api/settings`), and every change is checked against it on the TV, so the phone can only set what the TV's Settings page offers.
+- **Left out on purpose:** the phone remote's own switch and "Forget all paired phones". Changing either from the phone would cut the phone off; they stay on the TV.
+- **Your photo** (Wallpaper): the phone redraws the photo as an upright JPEG no bigger than 1920 px, uploads it to the TV's `Wallpapers` folder and sets it. A 12 MP photo becomes about 0.3–0.6 MB.
 
 **Files tab:**
 - **Uploads** stream straight to disk, so the size limit is the TV's free space. A 50 MB file takes about 4 s on Wi-Fi.
@@ -245,7 +280,7 @@ Moving the focus through the list previews each one behind Settings; **OK** sets
 | Night clouds | [Noctilucent clouds over Kuresoo bog](https://commons.wikimedia.org/wiki/File:Helkivad_%C3%B6%C3%B6pilved_Kuresoo_kohal.jpg) | Martin Koitmäe · CC BY-SA 4.0 |
 
 **Your own pictures** go in the **Wallpapers** folder on the TV's internal storage (`/sdcard/Wallpapers`). Any JPG, PNG or WebP there shows up at the end of the Wallpaper list under its file name, with a thumbnail; preview and set it like the built-in ones. Ideally 1920×1080 or larger; big photos are scaled down when loaded.
-- **Phone remote:** Files tab → **Wallpapers** (the shortcut under the storage list) → Upload.
+- **Phone remote:** Settings tab → Wallpaper → **Your photo** uploads a photo and sets it in one go. Or Files tab → **Wallpapers** (the shortcut under the storage list) → Upload, then pick it on the TV.
 - **ADB:** `adb push mypicture.jpg /sdcard/Wallpapers/`
 
 Deleting a picture that's in use switches back to the default. The folder survives a launcher uninstall; the downloaded built-in photos don't. (An older picture pushed to `Android/data/my.rafhan.app.tvhome/files/wallpaper.jpg` still appears as **Your picture**.)

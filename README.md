@@ -58,28 +58,28 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
       <b>Also:</b>
       <ul>
         <li><b>Azan</b> at each prayer time with a banner over any app, plus a silent reminder a few minutes before (you choose how early).</li>
-        <li><b>Wallpapers</b>: seven photos from Wikimedia Commons, previewed as you move through the list, plus your own pictures from a <code>Wallpapers</code> folder.</li>
+        <li><b>Wallpapers</b>: Bing's photo of the day (scenery only, no people), seven photos from Wikimedia Commons, previewed as you move through the list, plus your own pictures from a <code>Wallpapers</code> folder.</li>
         <li><b>Notifications bell</b>: Play Store updates, new HDMI devices, Bluetooth devices and low memory.</li>
         <li><b>Connection banner</b> over any app when Wi-Fi drops or loses internet.</li>
         <li><b>Inputs</b> menu for HDMI 1–3, AV and Live TV.</li>
-        <li>Light: a 0.6 MB app that uses about half the stock launcher's memory, with less than half its janky frames (<a href="#benchmark">benchmark</a>).</li>
+        <li>Light: a 0.7 MB app that uses about half the stock launcher's memory, with less than half its janky frames (<a href="#benchmark">benchmark</a>).</li>
       </ul>
     </td>
   </tr>
   <tr>
-    <td valign="top"><b>Wallpapers</b>: move to preview, OK to set. Add your own from the phone remote's Files tab.</td>
+    <td valign="top"><b>Wallpapers</b>: move to preview, OK to set. Add your own from the phone remote: Settings → Wallpaper → Your photo.</td>
     <td></td>
   </tr>
 </table>
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/tvremote.jpg" alt="Phone remote: touchpad, Back, Home, Play/Pause, volume, keyboard"></td>
-    <td align="center" width="33%"><img src="docs/tvremote-applist.jpg" alt="Phone remote: app list"></td>
-    <td align="center" width="33%"><img src="docs/tvremote-sendfile.jpg" alt="Phone remote: TV storage with upload"></td>
+    <td align="center" width="33%"><img src="docs/tvremote.jpg" alt="Phone remote, Remote tab: touchpad, Back, Home, Play/Pause, volume, screenshot, keyboard"></td>
+    <td align="center" width="33%"><img src="docs/tvremote-tv.jpg" alt="Phone remote, TV tab: Now Playing, prayer times, system, power and sleep timer, inputs, send to TV"></td>
+    <td align="center" width="33%"><img src="docs/tvremote-settings.jpg" alt="Phone remote, Settings tab: clock, cards, wallpaper dim and wallpaper thumbnails"></td>
   </tr>
   <tr>
-    <td colspan="3" align="center"><b>Phone remote</b> in the phone's browser, no app to install: swipe to move, type into any app, open apps, switch inputs, edit the dock and send files to the TV. See <a href="docs/features.md#phone-remote">Phone remote</a>.</td>
+    <td colspan="3" align="center"><b>Phone remote</b> in the phone's browser, no app to install: swipe to move, type into any app, open and manage apps, see what's playing, prayer times and the bell, send a message or a link to the TV, change Settings and the wallpaper, a sleep timer, and send files to the TV. See <a href="docs/features.md#phone-remote">Phone remote</a>.</td>
   </tr>
 </table>
 
@@ -103,7 +103,15 @@ You need an Android TV or Google TV running Android 10 or newer, and a computer 
 | The gear | Settings: wallpaper, prayer zone, azan, cards, notifications, phone remote |
 | Back / Home | Back to the dock |
 
-**Phone remote:** open `http://<TV IP>:8486` in your phone's browser on the same Wi-Fi and pair with the PIN shown on the TV. Settings → Phone remote shows the exact address.
+**Phone remote:** open `http://<TV IP>:8486` in your phone's browser on the same Wi-Fi and pair with the PIN shown on the TV. Settings → Phone remote shows the exact address. Five tabs:
+
+| Tab | What's on it |
+|---|---|
+| Remote | Swipe for the D-pad, double-tap for OK, Back, Home, Play/Pause, volume; with USB debugging on, a keyboard for any app and a screenshot of the TV |
+| TV | Now Playing, prayer times, system info, the bell's notifications, inputs, power and a sleep timer, and **Send to TV**: a message (a box on the TV until OK) or a link (YouTube and Netflix open in their apps) |
+| Apps | Running apps (close or hide), the dock, all apps; hold an app for dock, force close or disable |
+| Files | The TV's storage and USB drives: upload, download, open on the TV |
+| Settings | The TV's Settings from the phone, including the wallpaper (or upload a photo and set it) and a searchable prayer zone list |
 
 More: [how every feature works](docs/features.md).
 
@@ -128,7 +136,7 @@ scripts/restore.sh                    # back to the TV's own launcher; re-enable
 scripts/restore.sh --remove-launcher  # ...and uninstalls this launcher
 ```
 
-**When you're done, turn USB debugging off** (Developer options): while it's on, anyone on your Wi-Fi can control the TV.
+**When you're done, turn USB debugging off** (Developer options): while it's on, anyone on your Wi-Fi can control the TV. Without it the phone remote still works, minus the D-pad and keyboard inside apps, screenshots, sleep/restart and the sleep timer, and disabling apps.
 
 ## More
 

@@ -64,8 +64,8 @@ final class NowPlayingPanel {
         void onShownChanged(boolean shown);
     }
 
-    /** One snapshot of the session being shown. */
-    private static final class Info {
+    /** One snapshot of the session being shown (also read by the phone remote's dashboard). */
+    static final class Info {
         String pkg, title, artist, artUri;
         int state, artId;
         long pos, updated, duration, actions;
@@ -115,7 +115,7 @@ final class NowPlayingPanel {
             if (info == null && !audio.isMusicActive()) return;
             int gen = generation;
             worker.execute(() -> {
-                Info i = readDumpsys();
+                Info i = readSession(ctx);
                 main.post(() -> {
                     if (gen != generation || helper != null) return;
                     show(i);
@@ -371,8 +371,11 @@ final class NowPlayingPanel {
     private static final Pattern STATE = Pattern.compile(
             "state=PlaybackState \\{state=(\\d+), position=(-?\\d+),.*?speed=([\\d.]+), updated=(\\d+), actions=(\\d+)");
 
-    /** Best session from `dumpsys media_session` (needs DUMP), or null. Runs on the worker. */
-    private Info readDumpsys() {
+    /**
+     * Best session from `dumpsys media_session` (needs DUMP), or null. Blocking: run off the main
+     * thread. Shared with the phone remote, which needs it while another app is on screen too.
+     */
+    static Info readSession(Context ctx) {
         Info best = null;
         int bestRank = 0;
         try {
@@ -569,7 +572,7 @@ final class NowPlayingPanel {
         }
     }
 
-    private static String stateLabel(int state) {
+    static String stateLabel(int state) {
         switch (state) {
             case PlaybackState.STATE_PLAYING: return "Playing";
             case PlaybackState.STATE_PAUSED: return "Paused";

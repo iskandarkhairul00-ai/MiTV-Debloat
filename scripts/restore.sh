@@ -1,6 +1,6 @@
 #!/bin/bash
 # Undo everything this project changed on the TV (any brand), using what was recorded in backup/:
-#  - re-enables every package listed in backup/disabled-by-us.txt
+#  - re-enables every package listed in backup/disabled-by-us.txt, and any the phone remote disabled
 #  - lets background-restricted apps run in the background again and puts Wi-Fi scanning back
 #    (only if those speed tweaks were made: backup/bg-restricted.txt, backup/speed-tweaks-before.txt)
 #  - puts Private DNS back as it was (only if it was changed: backup/private-dns-before.txt)
@@ -16,6 +16,12 @@ if [ -f "$B/disabled-by-us.txt" ]; then
     echo "$p -> $(A shell pm enable --user 0 "$p" 2>&1 | tr -d '\r')"
   done < "$B/disabled-by-us.txt"
 fi
+# Apps disabled from the phone remote's app manager (logged on the TV itself).
+REMOTE_LOG="/sdcard/Android/data/$PKG/files/disabled-by-remote.txt"
+for p in $(A shell "cat $REMOTE_LOG 2>/dev/null" | tr -d '\r'); do
+  echo "$p -> $(A shell pm enable --user 0 "$p" 2>&1 | tr -d '\r')"
+done
+A shell "rm -f $REMOTE_LOG"
 # Speed tweaks: background restrictions and Wi-Fi scanning.
 if [ -f "$B/bg-restricted.txt" ]; then
   while read -r p; do

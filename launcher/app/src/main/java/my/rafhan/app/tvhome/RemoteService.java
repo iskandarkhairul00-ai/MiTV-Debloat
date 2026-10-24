@@ -18,6 +18,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
     private NetBanner netBanner;
     private AlertSources alertSources;
     private Azan azan;
+    private SleepTimer sleepTimer;
 
     /** Banners and the PIN card over other apps keep the launcher's proportions (UiScale). */
     @Override
@@ -31,11 +32,12 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Phone remote", NotificationManager.IMPORTANCE_MIN));
         startForeground(1, notification());
+        netBanner = new NetBanner(this);
+        netBanner.start();
+        sleepTimer = new SleepTimer(this, netBanner);
         // Settings → Phone remote can switch the server off; the banner and alerts keep running.
         if (LauncherSettings.flag(this, LauncherSettings.REMOTE)) startServer();
         LauncherSettings.addListener(this);
-        netBanner = new NetBanner(this);
-        netBanner.start();
         alertSources = new AlertSources(this, netBanner);
         alertSources.start();
         azan = new Azan(this, netBanner);
@@ -52,7 +54,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
     }
 
     private void startServer() {
-        server = new RemoteServer(this);
+        server = new RemoteServer(this, sleepTimer);
         server.start();
     }
 
@@ -86,6 +88,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         if (netBanner != null) netBanner.stop();
         if (alertSources != null) alertSources.stop();
         if (azan != null) azan.stop();
+        if (sleepTimer != null) sleepTimer.stop();
         super.onDestroy();
     }
 

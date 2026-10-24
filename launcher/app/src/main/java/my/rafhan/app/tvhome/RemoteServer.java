@@ -66,10 +66,13 @@ final class RemoteServer {
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
     private final SharedPreferences prefs;
     private final PinOverlay overlay;
+    private final MessageOverlay messages;
     private final FileApi files;
     private final AdbKeys adbKeys;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, byte[]> banners = new HashMap<>();
+    private final SleepTimer sleepTimer;
+    private final RemoteSettings settings;
     private volatile boolean running;
     private volatile ServerSocket socket;
 
@@ -84,12 +87,15 @@ final class RemoteServer {
     private int appCacheDock;
     private long appCacheAt;
 
-    RemoteServer(Context ctx) {
+    RemoteServer(Context ctx, SleepTimer sleepTimer) {
         this.ctx = ctx;
+        this.sleepTimer = sleepTimer;
         prefs = ctx.getSharedPreferences("remote", Context.MODE_PRIVATE);
         overlay = new PinOverlay(ctx);
+        messages = new MessageOverlay(ctx);
         files = new FileApi(ctx);
         adbKeys = AdbKeys.get(ctx);
+        settings = new RemoteSettings(ctx);
     }
 
     void start() {
@@ -107,6 +113,7 @@ final class RemoteServer {
         synchronized (this) {
             appCache = null;
         }
+        settings.trim();
     }
 
     void stop() {
@@ -301,9 +308,107 @@ final class RemoteServer {
                     else json(out, start(view));
                 }
                 return;
+            case "/api/dashboard":
+                json(out, 200, RemoteDashboard.build(ctx, adbKeys, sleepTimer));
+                return;
+            case "/api/media":
+                if (post(method, out)) json(out, mediaAction(query.get("a")));
+                return;
+            case "/api/alerts/open":
+                if (post(method, out)) json(out, openAlert(query.get("id")));
+                return;
+            case "/api/alerts/clear":
+                if (post(method, out)) {
+                    Alerts.get().clear();
+                    json(out, 200, ok());
+                }
+                return;
+            case "/api/message":
+                if (post(method, out)) json(out, message(body));
+                return;
+            case "/api/openurl":
+                if (post(method, out)) json(out, openUrl(body));
+                return;
+            case "/api/running":
+                json(out, 200, runningJson());
+                return;
+            case "/api/running/close":
+                if (post(method, out)) json(out, closeRunning(query.get("pkg")));
+                return;
+            case "/api/running/hide":
+                if (post(method, out)) {
+                    String pkg = query.get("pkg");
+                    if (pkg == null) json(out, 400, err("No app given."));
+                    else {
+                        RunningApps.setHidden(ctx, pkg, !"0".equals(query.get("on")));
+                        json(out, 200, ok());
+                    }
+                }
+                return;
+            case "/api/power":
+                if (post(method, out)) json(out, power(query.get("a")));
+                return;
+            case "/api/sleeptimer":
+                if (post(method, out)) {
+                    int min = 0;
+                    try {
+                        min = Math.max(0, Math.min(240, Integer.parseInt(query.get("min"))));
+                    } catch (Exception ignored) {
+                    }
+                    sleepTimer.set(min);
+                    json(out, 200, ok());
+                }
+                return;
+            case "/api/apps/disabled":
+                json(out, 200, disabledJson());
+                return;
+            case "/api/apps/disable":
+            case "/api/apps/enable":
+                if (post(method, out)) {
+                    String pkg = query.get("pkg");
+                    String why = path.endsWith("disable") ? AppManager.disable(ctx, pkg) : AppManager.enable(ctx, pkg);
+                    if (why == null) synchronized (this) {
+                        appCache = null; // the app list changes
+                    }
+                    json(out, why == null ? 200 : 409, why == null ? ok() : err(why));
+                }
+                return;
+            case "/api/apps/trimcaches":
+                if (post(method, out)) {
+                    long freed = AppManager.trimCaches(ctx);
+                    if (freed < 0) json(out, 409, err("Turn on USB debugging on the TV first."));
+                    else json(out, 200, new JSONObjectBuilder().put("ok", true).put("freedMb", freed / 1_000_000).build());
+                }
+                return;
             case "/api/screenshot":
                 screenshot(out);
                 return;
+            case "/api/settings":
+                if ("POST".equals(method)) {
+                    String why;
+                    try {
+                        why = settings.set(new JSONObject(new String(body, StandardCharsets.UTF_8)));
+                    } catch (JSONException e) {
+                        why = "Bad request.";
+                    }
+                    if (why != null) json(out, 400, err(why));
+                    else json(out, 200, settings.schema());
+                } else {
+                    json(out, 200, settings.schema());
+                }
+                return;
+            case "/api/settings/zones":
+                json(out, 200, settings.zones());
+                return;
+            case "/api/wallpapers":
+                json(out, 200, settings.wallpapers());
+                return;
+            case "/api/wallpaper/thumb": {
+                byte[] jpg = settings.thumb(query.get("id"));
+                if (jpg == null) json(out, 404, err("No picture yet."));
+                else send(out, 200, "image/jpeg", jpg, "max-age=86400");
+                return;
+            }
             case "/api/unpair":
                 if (post(method, out)) {
                     unpair(token);
@@ -489,6 +594,123 @@ final class RemoteServer {
         return new Object[] {404, err("No such input.")};
     }
 
+    /** TV tab: Play/Pause and Stop for whatever plays, or open the app that's playing. */
+    private Object[] mediaAction(String a) {
+        AudioManager am = ctx.getSystemService(AudioManager.class);
+        if ("playpause".equals(a)) {
+            media(am, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
+            return new Object[] {200, ok()};
+        }
+        if ("stop".equals(a)) {
+            media(am, KeyEvent.KEYCODE_MEDIA_STOP);
+            return new Object[] {200, ok()};
+        }
+        if ("open".equals(a)) {
+            NowPlayingPanel.Info i = RemoteDashboard.session(ctx);
+            if (i == null) return new Object[] {404, err("Nothing is playing.")};
+            return open(i.pkg);
+        }
+        return new Object[] {400, err("Unknown action.")};
+    }
+
+    /** TV tab: a bell notification opened on the TV (then cleared, as on the TV). */
+    private Object[] openAlert(String id) {
+        for (Alerts.Alert a : Alerts.get().list()) {
+            if (!a.id.equals(id)) continue;
+            Alerts.get().dismiss(a);
+            return a.action != null ? start(new Intent(a.action)) : new Object[] {200, ok()};
+        }
+        return new Object[] {404, err("That notification is gone.")};
+    }
+
+    /** TV tab: a short message typed on the phone, in a box over whatever is on the TV until OK. */
+    private Object[] message(byte[] body) {
+        String t;
+        try {
+            t = new JSONObject(new String(body, StandardCharsets.UTF_8)).optString("text").trim();
+        } catch (JSONException e) {
+            return new Object[] {400, err("Bad request.")};
+        }
+        if (t.isEmpty()) return new Object[] {400, err("Type a message first.")};
+        if (t.length() > 120) t = t.substring(0, 120);
+        if (!messages.canShow()) {
+            return new Object[] {503, err("The TV can't show messages: run scripts/build-and-install.sh to grant the overlay permission.")};
+        }
+        messages.show(t);
+        return new Object[] {200, ok()};
+    }
+
+    /**
+     * TV tab: a link pasted on the phone, opened on the TV. YouTube and Netflix links go straight to
+     * their TV apps; anything else needs an app on the TV that opens web links.
+     */
+    private Object[] openUrl(byte[] body) {
+        String url;
+        try {
+            url = new JSONObject(new String(body, StandardCharsets.UTF_8)).optString("url").trim();
+        } catch (JSONException e) {
+            return new Object[] {400, err("Bad request.")};
+        }
+        if (url.isEmpty()) return new Object[] {400, err("Paste a link first.")};
+        if (!url.matches("(?i)^[a-z][a-z0-9+.-]*:.*")) url = "https://" + url;
+        android.net.Uri uri = android.net.Uri.parse(url);
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        String app = host.endsWith("youtube.com") || host.equals("youtu.be") ? "com.google.android.youtube.tv"
+                : host.endsWith("netflix.com") ? "com.netflix.ninja" : null;
+        Intent view = new Intent(Intent.ACTION_VIEW, uri);
+        if (app != null) {
+            Object[] r = start(new Intent(view).setPackage(app));
+            if ((int) r[0] == 200) return r;
+        }
+        return start(view);
+    }
+
+    /** Apps tab: running apps (launchable ones), as on the TV's running-apps screen. Blocking. */
+    private JSONObject runningJson() throws JSONException {
+        JSONArray arr = new JSONArray();
+        for (RunningApps.App a : RunningApps.list(ctx)) {
+            arr.put(new JSONObject().put("pkg", a.entry.pkg).put("label", a.entry.label).put("state", a.state)
+                    .put("memKb", a.pssKb).put("hidden", a.hidden));
+        }
+        return new JSONObject().put("ok", true).put("apps", arr)
+                .put("adb", adbKeys.state() == AdbKeys.State.READY);
+    }
+
+    private Object[] closeRunning(String pkg) {
+        if (pkg == null) return new Object[] {400, err("No app given.")};
+        for (RunningApps.App a : RunningApps.list(ctx)) {
+            if (!a.entry.pkg.equals(pkg)) continue;
+            return new Object[] {200, new JSONObjectBuilder().put("ok", true)
+                    .put("message", RunningApps.forceStop(ctx, a)).build()};
+        }
+        return new Object[] {200, new JSONObjectBuilder().put("ok", true).put("message", "It's not running any more.").build()};
+    }
+
+    /** Apps the phone remote disabled, with their names, to turn back on. */
+    private JSONObject disabledJson() throws JSONException {
+        JSONArray arr = new JSONArray();
+        PackageManagerHelper pm = new PackageManagerHelper(ctx);
+        for (String pkg : AppManager.disabled(ctx)) arr.put(new JSONObject().put("pkg", pkg).put("label", pm.label(pkg)));
+        return new JSONObject().put("ok", true).put("apps", arr);
+    }
+
+    /** TV tab: Sleep now / Restart (ADB). Restart answers first: the TV drops off the network. */
+    private Object[] power(String a) {
+        if (adbKeys.state() != AdbKeys.State.READY) return adbReason();
+        if ("sleep".equals(a)) {
+            AppManager.run(ctx, "input keyevent KEYCODE_SLEEP");
+            return new Object[] {200, ok()};
+        }
+        if ("reboot".equals(a)) {
+            new Thread(() -> {
+                SystemClock.sleep(800);
+                AppManager.run(ctx, "reboot");
+            }, "remote-reboot").start();
+            return new Object[] {200, ok()};
+        }
+        return new Object[] {400, err("Unknown action.")};
+    }
+
     private final Object shotLock = new Object();
 
     /**
@@ -554,6 +776,12 @@ final class RemoteServer {
         try {
             n = Math.max(1, Math.min(50, Integer.parseInt(count)));
         } catch (NumberFormatException ignored) {
+        }
+        // A message from the phone is on screen: the phone's OK or Back closes it (even without
+        // USB debugging, when the keys couldn't reach it).
+        if (messages.isShowing() && (k.equals("ok") || k.equals("enter") || k.equals("back"))) {
+            messages.hide();
+            return new Object[] {200, ok()};
         }
         AudioManager am = ctx.getSystemService(AudioManager.class);
         switch (k) {
