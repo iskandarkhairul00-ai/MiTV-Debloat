@@ -125,7 +125,7 @@ The card sits under the pills, starting at the Inputs pill. It shows:
 
 ## Phone remote
 
-Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Phone remote on the TV shows the exact address). Use **Add to Home Screen** to get an app icon.
+Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Phone remote on the TV shows the exact address). For **full screen**: on Android, tap the TV's name at the top (it hides the address bar; tap it again to leave, and it's remembered after a reload). On iPhone, use **Share → Add to Home Screen** and open it from there: it opens full screen, like an app.
 
 <table>
   <tr>
@@ -152,6 +152,7 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 | Remote | Swipe = D-pad, double-tap = OK | Home screen always. **In any app while USB debugging is on**; otherwise the pad dims in apps |
 | Remote | Keyboard, Delete, Enter (only shown while USB debugging is on) | Type into any text field on the TV, e.g. YouTube or Netflix search (letters, numbers, symbols) |
 | Remote | Back, Home | Everywhere, through the launcher's accessibility service |
+| Remote | Screenshot (only shown while USB debugging is on) | Captures whatever is on the TV and shows it on the phone; **Save** downloads the PNG, or press and hold it to save to Photos. DRM video (Netflix, etc.) comes out black |
 | Remote | Play/Pause | Whatever is playing (Netflix, YouTube, RadioStream…) |
 | Remote | Vol −, Mute, Vol + | Everywhere; shows the TV's volume bar |
 | Apps | Dock, then all apps most-used first; tap to open | Everywhere |

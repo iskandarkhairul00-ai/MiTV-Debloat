@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="TV Remote">
 <link rel="apple-touch-icon" href="/icon.png">
 <link rel="icon" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
 <title>TV Remote</title>
 <style>
   @font-face { font-family: Outfit; src: url(/font) format("truetype"); font-weight: 100 900; }
@@ -60,6 +61,14 @@
   .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
   .row button { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: var(--dim); padding: 12px 6px; }
   .row svg { width: 24px; height: 24px; fill: #fff; }
+  .row.four { grid-template-columns: repeat(4, 1fr); }
+  #shot { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: flex; flex-direction: column; gap: 12px; z-index: 11;
+          padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+  #shot .view { flex: 1; min-height: 0; display: grid; place-items: center; }
+  #shot img { max-width: 100%; max-height: 100%; border-radius: 10px; }
+  #shot .msg { color: var(--dim); font-size: 14px; text-align: center; padding: 0 12px; }
+  #shot .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  #shot .actions button { font-size: 16px; padding: 14px; }
   #kb { width: 100%; margin-top: 10px; font: inherit; font-size: 17px; color: var(--text); background: var(--glass);
     border: 1px solid rgba(255,255,255,.35); border-radius: 16px; padding: 14px 16px; outline: none; -webkit-user-select: text; user-select: text; }
 
@@ -160,7 +169,8 @@
       <button data-key="mute"><svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>Mute</button>
       <button data-key="volup"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>Vol +</button>
     </div>
-    <div class="row hidden" id="adbRow">
+    <div class="row four hidden" id="adbRow">
+      <button id="shotBtn"><svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>Screenshot</button>
       <button id="kbBtn"><svg viewBox="0 0 24 24"><path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>Keyboard</button>
       <button data-key="backspace"><svg viewBox="0 0 24 24"><path d="M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 12.59L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 8.41 15.41 12 19 15.59z"/></svg>Delete</button>
       <button data-key="enter"><svg viewBox="0 0 24 24"><path d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 1.41-1.41L5.83 13H21V7z"/></svg>Enter</button>
@@ -188,6 +198,16 @@
     <button data-tab="files"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>Files</button>
   </nav>
 </section>
+
+<div id="shot" class="hidden">
+  <div class="view"><div class="msg" id="shotMsg"></div><img id="shotImg" class="hidden" alt="Screenshot of the TV"></div>
+  <div class="msg">Press and hold the picture to save it to Photos.</div>
+  <div class="actions">
+    <button id="shotRetake">Retake</button>
+    <button id="shotSave">Save</button>
+    <button id="shotClose">Close</button>
+  </div>
+</div>
 
 <div id="sheet" class="hidden">
   <div class="panel">
@@ -331,6 +351,74 @@ async function refreshState(force) {
   if (!token || (document.hidden && force !== true)) return;
   try { const s = await api("/api/state"); $("tvName").textContent = s.name || "TV"; setHome(s.home, s.adb); } catch (e) {}
 }
+
+// full screen: tap the TV's name. It hides the browser's address bar (and the system bars on
+// Android). Browsers only allow it from a tap, so once turned on it's remembered and re-entered at
+// the next tap after a reload. iPhone browsers have no full-screen mode for pages: there, Add to
+// Home Screen opens the remote as a full-screen app (apple-mobile-web-app-capable above).
+const standalone = matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches
+  || navigator.standalone === true;
+const fsSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function enterFull() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : el.webkitRequestFullscreen();
+  if (req && req.catch) req.catch(() => {});
+}
+function exitFull() { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+$("tvName").onclick = () => {
+  if (standalone) return; // already full screen (opened from the home screen)
+  if (!fsSupported) { flash("For full screen on iPhone: tap Share, then Add to Home Screen, and open it from there."); return; }
+  if (isFull()) { exitFull(); try { localStorage.removeItem("tvfull"); } catch (e) {} }
+  else { enterFull(); try { localStorage.setItem("tvfull", "1"); } catch (e) {} }
+};
+let fsRestore = false;
+try { fsRestore = fsSupported && !standalone && localStorage.getItem("tvfull") === "1"; } catch (e) {}
+if (fsRestore) document.addEventListener("pointerup", function again() {
+  document.removeEventListener("pointerup", again);
+  if (!isFull()) enterFull();
+});
+
+// screenshot: the TV's screen, taken over its own ADB connection (so only while USB debugging is on).
+let shotUrl = null, shotBlob = null;
+const SHOT_REASONS = {
+  "home-only": "Turn on USB debugging on the TV to take screenshots.",
+  "adb-allow": "On the TV, accept \"Allow USB debugging\" (tick Always allow), then try again.",
+  "adb-connecting": "Connecting to the TV… try again in a moment.",
+};
+async function takeShot() {
+  $("shot").classList.remove("hidden");
+  $("shotImg").classList.add("hidden");
+  $("shotMsg").classList.remove("hidden");
+  $("shotMsg").textContent = "Taking a screenshot of the TV…";
+  $("shotSave").disabled = true;
+  try {
+    const res = await fetch("/api/screenshot", { headers: { "X-Token": token } });
+    if (res.status === 401) { token = ""; localStorage.removeItem("tvtoken"); $("shot").classList.add("hidden"); show("pair"); return; }
+    if (!(res.headers.get("Content-Type") || "").startsWith("image/")) {
+      let b = {}; try { b = await res.json(); } catch (e) {}
+      throw new Error(SHOT_REASONS[b.reason] || b.error || "Couldn't take a screenshot. Try again.");
+    }
+    shotBlob = await res.blob();
+    if (shotUrl) URL.revokeObjectURL(shotUrl);
+    shotUrl = URL.createObjectURL(shotBlob);
+    $("shotImg").src = shotUrl;
+    $("shotImg").classList.remove("hidden");
+    $("shotMsg").classList.add("hidden");
+    $("shotSave").disabled = false;
+  } catch (e) { $("shotMsg").textContent = e.message; }
+}
+$("shotBtn").onclick = takeShot;
+$("shotRetake").onclick = takeShot;
+$("shotClose").onclick = () => $("shot").classList.add("hidden");
+$("shotSave").onclick = () => {
+  if (!shotBlob) return;
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  const a = document.createElement("a");
+  a.href = shotUrl;
+  a.download = `tv-screenshot-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+};
 
 // keyboard: mirror the field onto the TV. Diff against what the TV already has: removed chars
 // become Delete presses, added text is typed (batched, 350 ms after the last keystroke).

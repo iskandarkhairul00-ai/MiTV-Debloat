@@ -212,6 +212,13 @@ final class RemoteServer {
             case "/icon.png":
                 send(out, 200, "image/png", icon(), "max-age=86400");
                 return;
+            case "/manifest.json": // lets phones install the remote as a full-screen app
+                send(out, 200, "application/manifest+json", ("{\"name\":\"TV Remote\",\"short_name\":\"TV Remote\","
+                        + "\"start_url\":\"/\",\"display\":\"fullscreen\",\"orientation\":\"portrait\","
+                        + "\"background_color\":\"#000000\",\"theme_color\":\"#000000\","
+                        + "\"icons\":[{\"src\":\"/icon.png\",\"sizes\":\"180x180\",\"type\":\"image/png\"}]}")
+                        .getBytes(StandardCharsets.UTF_8), "max-age=86400");
+                return;
             case "/api/pair":
                 if (post(method, out)) json(out, requestPin());
                 return;
@@ -293,6 +300,9 @@ final class RemoteServer {
                     else if (view == null) json(out, 415, err("The TV doesn't know how to open this file type."));
                     else json(out, start(view));
                 }
+                return;
+            case "/api/screenshot":
+                screenshot(out);
                 return;
             case "/api/unpair":
                 if (post(method, out)) {
@@ -477,6 +487,42 @@ final class RemoteServer {
         } catch (NumberFormatException ignored) {
         }
         return new Object[] {404, err("No such input.")};
+    }
+
+    private final Object shotLock = new Object();
+
+    /**
+     * The TV's screen as a PNG, for the phone's Screenshot button. Apps can't capture other apps,
+     * so it runs `screencap` as the shell user over the loopback ADB connection (USB debugging on).
+     * It writes to a file and reads it back: on this TV screencap's stdout carries vendor log noise.
+     * DRM-protected video (Netflix, etc.) comes out black.
+     */
+    private void screenshot(OutputStream out) throws IOException {
+        if (adbKeys.state() != AdbKeys.State.READY) {
+            json(out, adbReason());
+            return;
+        }
+        byte[] png = null;
+        synchronized (shotLock) {
+            java.io.File f = new java.io.File(android.os.Environment.getExternalStorageDirectory(), ".tvhome-screenshot.png");
+            f.delete();
+            AdbKeys.Hid h = adbKeys.shell("timeout 15 screencap -p " + f.getPath());
+            if (h != null) {
+                try {
+                    while (h.stream.getSource().readUtf8Line() != null) { /* until screencap exits */ }
+                } catch (Exception ignored) {
+                } finally {
+                    adbKeys.stop(h);
+                }
+                try {
+                    if (f.length() > 0) png = java.nio.file.Files.readAllBytes(f.toPath());
+                } catch (IOException ignored) {
+                }
+                f.delete();
+            }
+        }
+        if (png == null) json(out, 500, err("Couldn't take a screenshot. Try again."));
+        else send(out, 200, "image/png", png, "no-store");
     }
 
     /** Why a key that needs ADB can't be sent right now. */
