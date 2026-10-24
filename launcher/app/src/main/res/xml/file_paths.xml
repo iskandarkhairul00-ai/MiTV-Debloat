@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Phone remote "Open on TV": any file the Files tab can browse (internal storage and USB
-     volumes under /storage). FileApi only hands out paths inside those roots. -->
+<!-- Phone remote "Open on TV": a file the Files tab browsed, handed to the viewer app. FileApi
+     only ever hands out paths inside a storage root, so expose just the storage tree
+     (/storage/emulated/0 and removable volumes like /storage/XXXX-XXXX) instead of /. -->
 <paths>
-    <root-path name="root" path="/" />
+    <root-path name="storage" path="/storage/" />
 </paths>
