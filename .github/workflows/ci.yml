@@ -23,7 +23,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The action's default package list still names the legacy "tools" package, which the SDK
+      # repository no longer publishes: sdkmanager fails with "Failed to find package 'tools'".
+      # Ask for what the build actually needs (compileSdk 36 and AGP 8.13's build tools).
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       # Caches ~/.gradle (dependencies, wrapper distribution, build cache) between runs.
       - uses: gradle/actions/setup-gradle@v4
