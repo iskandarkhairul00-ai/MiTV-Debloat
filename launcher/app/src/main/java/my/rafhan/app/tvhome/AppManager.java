@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * The phone remote's app manager: disable / enable apps and free the TV's caches, run as the shell
@@ -73,6 +74,7 @@ final class AppManager {
 
     /** Disables {@code pkg} for the main user (never uninstalls) and logs it. Blocking. */
     static String disable(Context ctx, String pkg) {
+        if (!validPackage(pkg)) return "No app given.";
         String why = refusal(ctx, pkg);
         if (why != null) return why;
         String out = run(ctx, "pm disable-user --user 0 " + pkg);
@@ -86,7 +88,7 @@ final class AppManager {
 
     /** Re-enables {@code pkg} and drops it from the log. Blocking. */
     static String enable(Context ctx, String pkg) {
-        if (pkg == null || pkg.isEmpty()) return "No app given.";
+        if (!validPackage(pkg)) return "No app given.";
         String out = run(ctx, "pm enable --user 0 " + pkg);
         if (out == null) return "Turn on USB debugging on the TV first.";
         if (!out.contains("enabled")) return "The TV refused: " + out.trim();
@@ -94,6 +96,15 @@ final class AppManager {
         d.remove(pkg);
         save(ctx, d);
         return null;
+    }
+
+    // Package names the phone remote can send are interpolated into ADB shell commands, so accept
+    // only what Android itself accepts: letters, digits, dots and underscores. This stops a paired
+    // phone from smuggling shell metacharacters ("pkg; ...") into `pm enable`.
+    private static final Pattern PACKAGE_NAME = Pattern.compile("[A-Za-z0-9._]+");
+
+    private static boolean validPackage(String pkg) {
+        return pkg != null && pkg.length() <= 255 && PACKAGE_NAME.matcher(pkg).matches();
     }
 
     /** Frees every app's cache (Android 10's shell can't clear one app's); returns bytes freed, -1 without ADB. */
