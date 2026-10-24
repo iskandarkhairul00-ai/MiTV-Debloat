@@ -4,4 +4,6 @@ source "$(dirname "$0")/env.sh"
 out="$(dirname "$0")/../shots/${1:-shot}.png"
 A shell screencap -p /sdcard/_s.png >/dev/null 2>&1
 A pull /sdcard/_s.png "$out" >/dev/null && A shell rm /sdcard/_s.png
-sips -Z 1280 "$out" >/dev/null 2>&1; echo "$out"
+# Shrink for the docs, where sips exists (macOS). Elsewhere keep the full-size PNG.
+if command -v sips >/dev/null 2>&1; then sips -Z 1280 "$out" >/dev/null 2>&1; fi
+echo "$out"

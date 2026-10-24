@@ -4,6 +4,8 @@
 #  - lets background-restricted apps run in the background again and puts Wi-Fi scanning back
 #    (only if those speed tweaks were made: backup/bg-restricted.txt, backup/speed-tweaks-before.txt)
 #  - puts Private DNS back as it was (only if it was changed: backup/private-dns-before.txt)
+#  - removes this launcher's accessibility service and, if nothing else uses it, the
+#    accessibility_enabled flag it turned on (backup/accessibility-enabled-before.txt)
 #  - makes the TV's own launcher the home screen again (and optionally removes this launcher)
 # Usage: scripts/restore.sh [--remove-launcher]
 source "$(dirname "$0")/env.sh"
@@ -41,6 +43,13 @@ NEW="$(echo "$CUR" | tr ':' '\n' | grep -v "$PKG/" | paste -sd: -)"
 if [ "$NEW" != "$CUR" ]; then
   if [ -n "$NEW" ]; then A shell settings put secure enabled_accessibility_services "$NEW"
   else A shell settings delete secure enabled_accessibility_services; fi
+fi
+# accessibility_enabled was set to 1 for our service. Put the recorded value back, unless another
+# service is still enabled (then 1 is correct).
+BEFORE="$(tr -d '\r\n' < "$B/accessibility-enabled-before.txt" 2>/dev/null)"
+if [ -n "$BEFORE" ] && [ "$BEFORE" != "1" ] && [ -z "$NEW" ]; then
+  if [ "$BEFORE" = "null" ]; then A shell settings delete secure accessibility_enabled
+  else A shell settings put secure accessibility_enabled "$BEFORE"; fi
 fi
 # Private DNS, as recorded before it was changed ("before: <mode> / <specifier>").
 if [ -f "$B/private-dns-before.txt" ]; then

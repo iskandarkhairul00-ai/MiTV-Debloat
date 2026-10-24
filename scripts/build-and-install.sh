@@ -93,8 +93,12 @@ opt appops set $PKG GET_USAGE_STATS allow
 opt appops set $PKG SYSTEM_ALERT_WINDOW allow
 
 # Phone remote Back/Home in any app: enable our accessibility service next to whatever is
-# already enabled (Button Mapper), never replacing it.
+# already enabled (Button Mapper), never replacing it. The flag itself is recorded the first time
+# so restore.sh can put it back (it is 1 only because a service is enabled).
 SVC="$PKG/$PKG.RemoteAccessibilityService"
+if [ ! -f backup/accessibility-enabled-before.txt ]; then
+  A shell settings get secure accessibility_enabled | tr -d '\r' > backup/accessibility-enabled-before.txt
+fi
 CUR="$(A shell settings get secure enabled_accessibility_services | tr -d '\r')"
 case "$CUR" in
   *"$SVC"*) ;;
