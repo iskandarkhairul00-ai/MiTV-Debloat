@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.StatFs;
 import android.os.storage.StorageManager;
@@ -45,6 +46,15 @@ final class FileApi {
 
     FileApi(Context ctx) {
         this.ctx = ctx;
+    }
+
+    /**
+     * Whether the Files tab can read the TV's shared storage. Android 10 uses READ/WRITE with
+     * requestLegacyExternalStorage; Android 11+ replaced those with scoped storage and needs
+     * "All files access" (MANAGE_EXTERNAL_STORAGE), granted over ADB by build-and-install.sh.
+     */
+    static boolean hasAllFilesAccess() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
     }
 
     static final class Root {
@@ -90,7 +100,8 @@ final class FileApi {
             shortcuts.put(new JSONObject().put("name", "Wallpapers").put("path", canonical(walls).getPath())
                     .put("hint", "Pictures here appear in the TV's wallpaper list"));
         }
-        return new JSONObject().put("ok", true).put("roots", arr).put("shortcuts", shortcuts);
+        return new JSONObject().put("ok", true).put("roots", arr).put("shortcuts", shortcuts)
+                .put("access", hasAllFilesAccess());
     }
 
     /** {path, root, rootPath, parent, entries:[{name, dir, size, mtime}]}; null if the path isn't allowed. */

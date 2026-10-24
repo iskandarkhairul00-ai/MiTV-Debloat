@@ -19,15 +19,26 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Phone remote Files tab: browse, upload and download the TV's storage. Granted over ADB
-         by build-and-install.sh; requestLegacyExternalStorage gives plain file access on Android 10. -->
+    <!-- Phone remote Files tab: browse, upload and download the TV's storage. On Android 10
+         READ/WRITE plus requestLegacyExternalStorage give plain file access; both are granted
+         over ADB by build-and-install.sh. On Android 11+ those are ignored and "All files
+         access" (MANAGE_EXTERNAL_STORAGE, also granted over ADB) is what keeps the Files tab,
+         the Wallpapers folder and reading the screenshot file working. The app is sideloaded,
+         so Play's scoped-storage policy doesn't apply. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
     <!-- Now Playing card without USB debugging: read `dumpsys media_session`. A development
          permission, granted over ADB by build-and-install.sh. -->
     <uses-permission
         android:name="android.permission.DUMP"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Android 10 only reveals the Wi-Fi network name to apps holding location permission.

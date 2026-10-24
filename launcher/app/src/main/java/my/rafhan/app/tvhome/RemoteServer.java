@@ -289,7 +289,9 @@ final class RemoteServer {
                 return;
             case "/api/files/list": {
                 JSONObject list = files.list(query.get("path"));
-                if (list == null) json(out, 403, err("That folder isn't available."));
+                if (list == null) json(out, 403, err(FileApi.hasAllFilesAccess()
+                        ? "That folder isn't available."
+                        : "On Android 11+, run scripts/build-and-install.sh to grant All files access."));
                 else json(out, 200, list);
                 return;
             }

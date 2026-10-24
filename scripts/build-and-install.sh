@@ -75,6 +75,13 @@ opt() { A shell "$@" >/dev/null 2>&1 || echo "note: '$*' was refused by this TV 
 opt pm grant $PKG android.permission.READ_EXTERNAL_STORAGE
 opt pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE
 
+# Android 11+ replaced those with scoped storage: "All files access" keeps the Files tab, the
+# Wallpapers folder and reading the screenshot file working. The app is sideloaded, so granting
+# it over ADB (rather than the Settings → All files access toggle) is enough.
+if [ "${SDK:-0}" -ge 30 ] 2>/dev/null; then
+  opt appops set $PKG MANAGE_EXTERNAL_STORAGE allow
+fi
+
 # Android 10 only reveals the Wi-Fi network name to apps with location permission.
 opt pm grant $PKG android.permission.ACCESS_FINE_LOCATION
 
