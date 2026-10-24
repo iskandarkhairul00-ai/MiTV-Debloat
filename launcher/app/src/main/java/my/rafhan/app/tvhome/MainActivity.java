@@ -1,5 +1,6 @@
 package my.rafhan.app.tvhome;
 
+import android.Manifest;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -10,11 +11,13 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
@@ -25,6 +28,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -54,9 +58,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -457,6 +466,38 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Dock then grid, in the order the cards and the grid show them. */
+    private List<AppEntry> allForUsage() {
+        List<AppEntry> all = new ArrayList<>(dock.size() + apps.size());
+        all.addAll(dock);
+        all.addAll(apps);
+        return all;
+    }
+
+    /**
+     * Forgets cached tiles of apps that are gone (uninstalled, or no longer launchable), so their
+     * bitmaps aren't kept until the process dies. A tile the grid is still showing is not
+     * recycled: it hasn't rebound yet, and drawing a recycled bitmap crashes.
+     */
+    private void pruneTileCache(List<AppEntry> all) {
+        Set<String> live = new HashSet<>();
+        for (AppEntry e : all) live.add(e.cacheKey);
+        Set<Bitmap> onScreen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            RecyclerView.ViewHolder vh = grid.getChildViewHolder(grid.getChildAt(i));
+            if (!(vh instanceof Holder)) continue;
+            Drawable d = ((Holder) vh).tile.getDrawable();
+            if (d instanceof BitmapDrawable) onScreen.add(((BitmapDrawable) d).getBitmap());
+        }
+        for (Iterator<AppEntry> it = rendered.values().iterator(); it.hasNext(); ) {
+            AppEntry e = it.next();
+            if (live.contains(e.cacheKey)) continue;
+            it.remove();
+            if (e.tile != null && !onScreen.contains(e.tile)) e.tile.recycle();
+            e.tile = null;
+        }
+    }
+
     private void applyApps(List<AppEntry> all, List<String> dockPkgs, Map<String, Long> scores) {
         String focusedPkg = focusedPackage();
         Map<String, AppEntry> byPkg = new HashMap<>();
@@ -472,6 +513,7 @@ public class MainActivity extends Activity {
         usageScores = scores;
         sortByUsage(newApps);
 
+        pruneTileCache(all);
         List<AppEntry> toRender = new ArrayList<>();
         for (AppEntry e : all) {
             AppEntry done = rendered.get(e.cacheKey);
@@ -506,7 +548,7 @@ public class MainActivity extends Activity {
         gridIdx = clamp(gridIdx, apps.size());
         if (section == GRID && apps.isEmpty()) section = DOCK;
         if (section == DOCK && dock.isEmpty()) section = TOP;
-        usage.render(new ArrayList<AppEntry>() {{ addAll(dock); addAll(apps); }}, usageScores);
+        usage.render(allForUsage(), usageScores);
         if (!appsLoaded) {
             appsLoaded = true;
             restoreFocus(); // needs the app list; first load only
@@ -1749,6 +1791,14 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        // Nothing queued may run against a destroyed Activity: dropTiles, saveFocus, reloadApps
+        // and netRecheck all touch views. onStop normally unregisters the network callback; be
+        // defensive for the paths where destroy arrives without it.
+        main.removeCallbacksAndMessages(null);
+        if (netCallback != null) {
+            getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback);
+            netCallback = null;
+        }
         DockConfig.removeListener(dockChanged);
         LauncherSettings.removeListener(settingsChanged);
         Alerts.get().removeListener(alertsChanged);
