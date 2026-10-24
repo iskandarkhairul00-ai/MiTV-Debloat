@@ -14,7 +14,7 @@ MiTV-Debloat/
 │   ├── packages-*.txt           full package lists (all, system, third-party, disabled)
 │   ├── getprop.txt, settings-{global,secure,system}.txt
 │   ├── stock-home.txt           the TV's own launcher, recorded by build-and-install.sh (restore.sh returns to it)
-│   ├── home-default.txt, home-candidates.txt, accessibility.txt, private-dns-before.txt
+│   ├── home-default.txt, home-candidates.txt, accessibility.txt, accessibility-enabled-before.txt, private-dns-before.txt
 │   └── dumpsys/                 activities/services of every manufacturer package that was checked
 ├── launcher/                    the launcher source (Java, AndroidX RecyclerView, minSdk 29, targetSdk 36), incl. the phone remote
 │   ├── app/src/main/            the launcher, the phone remote page (assets/remote.html) and its resources
@@ -45,6 +45,7 @@ Notes on the install:
 - While the stock launcher is enabled, it always wins (its priority is 2). That's why it has to be disabled.
 - **New TV IP:** run `TV=<new-ip> scripts/build-and-install.sh` once; the new address is saved in `.tv` for every script.
 - **Adding a permission:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
+- **Signing:** the release APK is signed with the computer's debug key, so it upgrades an install in place only when built on the same machine. Built elsewhere, uninstall once (`adb shell pm uninstall my.rafhan.app.tvhome`) and install again; the launcher's settings and the paired phones are lost.
 
 ## Tests and CI
 
@@ -83,7 +84,7 @@ Measured with `scripts/benchmark.sh <home component> <label>`, using the optimis
 | Back to home from an app (wait time) | 233–308 ms | 214–284 ms |
 | Janky frames while navigating | **7.6 % (43/566)** | 18.9 % (62/328) |
 | Frame time p50 / p90 / p99 | 8 / **10** / 65 ms | 6 / 27 / 69 ms |
-| APK size | 0.5 MB | 12.7 MB |
+| APK size | 0.6 MB | 12.7 MB |
 
 **Notes:**
 - **Extra processes only while used:** the launcher is a single process at idle. The Now Playing helper (~23 MB) runs only while something plays, and the virtual keypad (~21 MB) only for 5 minutes after a phone-remote key press inside an app.

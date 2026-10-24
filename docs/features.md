@@ -235,7 +235,7 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 - Requests addressed by hostname instead of IP are refused (DNS rebinding), and cross-site requests are refused too. Responses carry a strict `Content-Security-Policy` (scripts run only from a per-load nonce), `X-Content-Type-Options: nosniff` and a no-referrer policy.
 - If the TV's IP changes, the bookmark breaks. Reserve the TV's IP address in your router.
 
-**Undo:** `scripts/restore.sh` removes the accessibility service and keeps Button Mapper's.
+**Undo:** `scripts/restore.sh` removes the accessibility service and keeps Button Mapper's (and turns `accessibility_enabled` back off if nothing else uses it).
 
 ## Change the dock
 

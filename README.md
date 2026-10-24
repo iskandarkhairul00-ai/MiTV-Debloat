@@ -7,7 +7,7 @@ A fast, minimal home screen for **Android TV and Google TV** (Android 10 or newe
 <table>
   <tr>
     <th width="50%">Before: stock Android TV home</th>
-    <th width="50%">After: this launcher (v1.5)</th>
+    <th width="50%">After: this launcher</th>
   </tr>
   <tr>
     <td width="50%"><img src="docs/launcher-old.jpg" width="100%" alt="Stock Android TV home screen with Favorite Apps, Play Next and AirConsole rows"></td>
@@ -62,7 +62,7 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
         <li><b>Notifications bell</b>: Play Store updates, new HDMI devices, Bluetooth devices and low memory.</li>
         <li><b>Connection banner</b> over any app when Wi-Fi drops or loses internet.</li>
         <li><b>Inputs</b> menu for HDMI 1–3, AV and Live TV.</li>
-        <li>Light: a 0.7 MB app that uses about half the stock launcher's memory, with less than half its janky frames (<a href="#benchmark">benchmark</a>).</li>
+        <li>Light: a 0.6 MB app that uses about half the stock launcher's memory, with less than half its janky frames (<a href="#benchmark">benchmark</a>).</li>
       </ul>
     </td>
   </tr>
@@ -127,7 +127,18 @@ Against the stock Android TV launcher on the Mi TV (2026-10-22). Method and note
 | Back to home from an app (wait time) | 233–308 ms | 214–284 ms |
 | Janky frames while navigating | **7.6 % (43/566)** | 18.9 % (62/328) |
 | Frame time p50 / p90 / p99 | 8 / **10** / 65 ms | 6 / 27 / 69 ms |
-| APK size | 0.5 MB | 12.7 MB |
+| APK size | 0.6 MB | 12.7 MB |
+
+## Security
+
+This setup is meant for a TV on your own network, and it deliberately makes the TV quite open. Worth knowing before you run it:
+
+- **USB debugging stays on** (port 5555): anyone on your Wi-Fi can connect with `adb` and control the TV. The launcher uses the same loopback connection for the remote's D-pad and keyboard inside apps, screenshots, sleep/restart and disabling apps. Turn it off in Developer options when you don't need those — the rest of the phone remote keeps working.
+- **What the launcher is granted over ADB:** "draw over other apps" (the pairing PIN and messages over any app), an accessibility service (Back and Home from the remote), `DUMP` (Now Playing without USB debugging) and All files access (the Files tab and the `Wallpapers` folder). The accessibility service can see what's on screen; it only ever sends Back and Home.
+- **The phone remote is plain HTTP on port 8486.** Pairing needs a six-digit PIN shown on the TV (five tries, then a lockout that grows to 15 minutes), and the server refuses requests whose `Host` isn't an IP address and any cross-site request, so a web page can't drive the TV. Traffic isn't encrypted though: keep the TV on a trusted WPA2/WPA3 network, never forward the port from your router, and use Settings → Phone remote → Forget all phones if you lose a phone.
+- **The release APK is signed with the debug key**, so it upgrades only an install built on the same machine. To switch machines (or to distribute it), uninstall once and reinstall; see [development.md](docs/development.md).
+
+`scripts/restore.sh` undoes the grants and the home-screen change.
 
 ## Undo
 
@@ -135,8 +146,6 @@ Against the stock Android TV launcher on the Mi TV (2026-10-22). Method and note
 scripts/restore.sh                    # back to the TV's own launcher; re-enables anything this project disabled
 scripts/restore.sh --remove-launcher  # ...and uninstalls this launcher
 ```
-
-**When you're done, turn USB debugging off** (Developer options): while it's on, anyone on your Wi-Fi can control the TV. Without it the phone remote still works, minus the D-pad and keyboard inside apps, screenshots, sleep/restart and the sleep timer, and disabling apps.
 
 ## More
 
