@@ -766,6 +766,11 @@ final class RemoteServer {
         if (url.isEmpty()) return new Object[] {400, err("Paste a link first.")};
         if (!url.matches("(?i)^[a-z][a-z0-9+.-]*:.*")) url = "https://" + url;
         android.net.Uri uri = android.net.Uri.parse(url);
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+        // Only web links. Without this, intent://, file:// and the like reached startActivity.
+        if (!scheme.equals("http") && !scheme.equals("https")) {
+            return new Object[] {400, err("Only web links (http or https) can be opened.")};
+        }
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
         String app = host.endsWith("youtube.com") || host.equals("youtu.be") ? "com.google.android.youtube.tv"
                 : host.endsWith("netflix.com") ? "com.netflix.ninja" : null;
@@ -953,7 +958,7 @@ final class RemoteServer {
         try {
             ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             return new Object[] {200, ok()};
-        } catch (ActivityNotFoundException | SecurityException e) {
+        } catch (ActivityNotFoundException | SecurityException | IllegalArgumentException e) {
             return new Object[] {500, err("No app on the TV can open it.")};
         }
     }
