@@ -141,6 +141,8 @@ final class FileApi {
                 + "Content-Length: " + f.length() + "\r\n"
                 + "Content-Disposition: attachment; filename*=UTF-8''" + URLEncoder.encode(f.getName(), "UTF-8").replace("+", "%20") + "\r\n"
                 + "Cache-Control: no-store\r\n"
+                + "X-Content-Type-Options: nosniff\r\n"
+                + "Referrer-Policy: no-referrer\r\n"
                 + "Connection: close\r\n\r\n";
         out.write(head.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
         try (InputStream in = new FileInputStream(f)) {

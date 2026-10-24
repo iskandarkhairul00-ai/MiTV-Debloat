@@ -229,8 +229,10 @@ Open **http://\<TV IP\>:8486** on your phone, on the same Wi-Fi (Settings → Ph
 - The accessibility service, appended next to Button Mapper's. If the Back button says it needs the accessibility service, re-run the script or enable "Home phone remote" in Settings → Device Preferences → Accessibility.
 
 **Security:**
-- It's plain HTTP on your LAN. Only paired phones can control it.
-- Requests addressed by hostname instead of IP are refused, which blocks DNS-rebinding tricks from web pages.
+- It's plain HTTP on your LAN, so treat it as trusted-network only: don't forward port 8486 through your router and turn USB debugging off when you're done. The PIN card shows which phone (its IP) asked for it.
+- Pairing needs a 6-digit PIN shown on the TV; five wrong tries (across PINs) locks pairing with a wait that doubles each time, up to 15 minutes.
+- Only paired phones can control it. Tokens are stored on the TV only as a SHA-256 hash, sent as an `X-Token` header, and kept in an `HttpOnly`, `SameSite=Strict` cookie for downloads and images, so a token never appears in a URL. Each phone can be forgotten on its own in the remote's Settings tab.
+- Requests addressed by hostname instead of IP are refused (DNS rebinding), and cross-site requests are refused too. Responses carry a strict `Content-Security-Policy` (scripts run only from a per-load nonce), `X-Content-Type-Options: nosniff` and a no-referrer policy.
 - If the TV's IP changes, the bookmark breaks. Reserve the TV's IP address in your router.
 
 **Undo:** `scripts/restore.sh` removes the accessibility service and keeps Button Mapper's.

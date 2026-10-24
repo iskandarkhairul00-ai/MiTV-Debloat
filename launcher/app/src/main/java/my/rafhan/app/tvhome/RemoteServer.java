@@ -62,7 +62,18 @@ final class RemoteServer {
     private static final int MAX_BODY = 4096;
     private static final long PIN_MS = 60_000;
     private static final int PIN_TRIES = 5;
+    /** A 6-digit PIN: a million combinations, five tries each, so guessing is hopeless. */
+    private static final int PIN_DIGITS = 6;
+    /** Wrong PINs (across PINs) before pairing locks, and how the wait grows. */
+    private static final int PIN_FAILS_BEFORE_LOCK = 5;
+    private static final long LOCK_BASE_MS = 30_000;
+    private static final long LOCK_MAX_MS = 15 * 60_000;
     private static final String IP_HOST = "\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?";
+    /** Locked down by default; scripts are allowed only by the nonce on the page's own tag. */
+    private static final String CSP = "default-src 'none'; img-src 'self' data: blob:; font-src 'self';"
+            + " connect-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline';"
+            + " base-uri 'none'; form-action 'self'; frame-ancestors 'none'; script-src ";
+    private static final String CSP_NO_SCRIPTS = CSP + "'none'";
 
     private final Context ctx;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
@@ -83,6 +94,9 @@ final class RemoteServer {
     private long pinUntil;
     private int pinTries;
     private long lastPinRequest;
+    /** Wrong PINs since the last success, and (wall clock) when pairing is allowed again. */
+    private int pinFailures;
+    private long pairingBlockedUntil;
 
     // App list cache (banner lookups), guarded by this.
     private List<AppEntry> appCache;
@@ -210,18 +224,24 @@ final class RemoteServer {
                 if (n < 0) break;
                 read += n;
             }
-            route(method, path, query, headers, body, out);
+            route(method, path, query, headers, body, out, c.getInetAddress().getHostAddress());
         } catch (IOException | RuntimeException | JSONException ignored) {
         }
     }
 
     private void route(String method, String path, Map<String, String> query, Map<String, String> headers,
-                       byte[] body, OutputStream out) throws IOException, JSONException {
+                       byte[] body, OutputStream out, String clientIp) throws IOException, JSONException {
         switch (path) {
             case "/":
-            case "/index.html":
-                send(out, 200, "text/html; charset=utf-8", asset("remote.html"), "no-cache");
+            case "/index.html": {
+                // A fresh nonce per page load, so only this page's own <script> can run.
+                String nonce = nonce();
+                String html = new String(asset("remote.html"), StandardCharsets.UTF_8)
+                        .replaceFirst("<script>", "<script nonce=\"" + nonce + "\">");
+                send(out, 200, "text/html; charset=utf-8", html.getBytes(StandardCharsets.UTF_8), "no-cache",
+                        null, CSP + "'nonce-" + nonce + "'");
                 return;
+            }
             case "/font":
                 send(out, 200, "font/ttf", asset("fonts/Outfit.ttf"), "max-age=86400");
                 return;
@@ -236,7 +256,7 @@ final class RemoteServer {
                         .getBytes(StandardCharsets.UTF_8), "max-age=86400");
                 return;
             case "/api/pair":
-                if (post(method, out)) json(out, requestPin());
+                if (post(method, out)) json(out, requestPin(clientIp));
                 return;
             case "/api/pair/confirm":
                 if (post(method, out)) {
@@ -462,21 +482,29 @@ final class RemoteServer {
 
     // ---------------------------------------------------------------- pairing
 
-    private synchronized Object[] requestPin() {
+    private synchronized Object[] requestPin(String clientIp) {
         long now = SystemClock.elapsedRealtime();
+        long wait = blockedFor();
+        if (wait > 0) return new Object[] {429, err("Too many wrong PINs. Try again in " + (wait / 1000) + "s.")};
         if (now - lastPinRequest < 3000) return new Object[] {429, err("Wait a moment and try again.")};
         if (!overlay.canShow()) {
             return new Object[] {503, err("The TV can't show the PIN: run scripts/build-and-install.sh to grant the overlay permission.")};
         }
         lastPinRequest = now;
-        pin = String.format(Locale.ROOT, "%04d", random.nextInt(10000));
+        pin = String.format(Locale.ROOT, "%0" + PIN_DIGITS + "d", random.nextInt(pow10(PIN_DIGITS)));
         pinUntil = now + PIN_MS;
         pinTries = 0;
-        overlay.show(pin, lanUrl(ctx), PIN_MS);
+        overlay.show(pin, lanUrl(ctx), clientIp, PIN_MS);
         return new Object[] {200, ok()};
     }
 
     private synchronized Object[] confirmPin(byte[] body, String userAgent) {
+        long wait = blockedFor();
+        if (wait > 0) {
+            pin = null;
+            overlay.hide();
+            return new Object[] {429, err("Too many wrong PINs. Try again in " + (wait / 1000) + "s.")};
+        }
         String given;
         try {
             given = new JSONObject(new String(body, StandardCharsets.UTF_8)).optString("pin");
@@ -488,7 +516,15 @@ final class RemoteServer {
             return new Object[] {410, err("No PIN on the TV. Tap \"Show PIN on TV\" again.")};
         }
         if (!pin.equals(given)) {
-            if (++pinTries >= PIN_TRIES) {
+            pinTries++;
+            pinFailures++;
+            if (pinFailures >= PIN_FAILS_BEFORE_LOCK) {
+                pin = null;
+                overlay.hide();
+                pairingBlockedUntil = System.currentTimeMillis() + lockMs(pinFailures);
+                return new Object[] {403, err("Too many wrong PINs. Show a new PIN on the TV later.")};
+            }
+            if (pinTries >= PIN_TRIES) {
                 pin = null;
                 overlay.hide();
                 return new Object[] {403, err("Too many wrong tries. Show a new PIN on the TV.")};
@@ -497,9 +533,29 @@ final class RemoteServer {
         }
         pin = null;
         overlay.hide();
+        pinFailures = 0;
+        pairingBlockedUntil = 0;
         String token = randomToken();
         devices.add(token, RemoteDevices.name(userAgent));
         return new Object[] {200, new JSONObjectBuilder().put("ok", true).put("token", token).build()};
+    }
+
+    /** Milliseconds pairing is still locked for, 0 if it isn't. */
+    private long blockedFor() {
+        long left = pairingBlockedUntil - System.currentTimeMillis();
+        return left > 0 ? left : 0;
+    }
+
+    /** 30s, then doubling each further failure, capped at 15 minutes. */
+    private static long lockMs(int failures) {
+        long ms = LOCK_BASE_MS << Math.min(10, Math.max(0, failures - PIN_FAILS_BEFORE_LOCK));
+        return Math.min(ms, LOCK_MAX_MS);
+    }
+
+    private static int pow10(int n) {
+        int v = 1;
+        for (int i = 0; i < n; i++) v *= 10;
+        return v;
     }
 
     private String randomToken() {
@@ -994,20 +1050,37 @@ final class RemoteServer {
     }
 
     private static void send(OutputStream out, int code, String type, byte[] body, String cache) throws IOException {
-        send(out, code, type, body, cache, null);
+        send(out, code, type, body, cache, null, CSP_NO_SCRIPTS);
     }
 
     private static void send(OutputStream out, int code, String type, byte[] body, String cache, String setCookie) throws IOException {
+        send(out, code, type, body, cache, setCookie, CSP_NO_SCRIPTS);
+    }
+
+    private static void send(OutputStream out, int code, String type, byte[] body, String cache, String setCookie,
+                             String csp) throws IOException {
         StringBuilder head = new StringBuilder()
                 .append("HTTP/1.1 ").append(code).append(' ').append(reason(code)).append("\r\n")
                 .append("Content-Type: ").append(type).append("\r\n")
                 .append("Content-Length: ").append(body.length).append("\r\n")
-                .append("Cache-Control: ").append(cache).append("\r\n");
+                .append("Cache-Control: ").append(cache).append("\r\n")
+                .append("X-Content-Type-Options: nosniff\r\n")
+                .append("Referrer-Policy: no-referrer\r\n")
+                .append("Content-Security-Policy: ").append(csp).append("\r\n");
         if (setCookie != null) head.append("Set-Cookie: ").append(setCookie).append("\r\n");
         head.append("Connection: close\r\n\r\n");
         out.write(head.toString().getBytes(StandardCharsets.ISO_8859_1));
         out.write(body);
         out.flush();
+    }
+
+    /** A fresh, unguessable value for the page's own inline script tag. */
+    private String nonce() {
+        byte[] b = new byte[12];
+        random.nextBytes(b);
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format(Locale.ROOT, "%02x", x));
+        return sb.toString();
     }
 
     private static String reason(int code) {

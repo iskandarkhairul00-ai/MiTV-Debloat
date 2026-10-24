@@ -32,7 +32,7 @@ final class PinOverlay {
         return Settings.canDrawOverlays(ctx);
     }
 
-    void show(String pin, String url, long millis) {
+    void show(String pin, String url, String from, long millis) {
         main.post(() -> {
             hideNow();
             float dp = ctx.getResources().getDisplayMetrics().density;
@@ -45,6 +45,8 @@ final class PinOverlay {
             card.addView(text("PHONE REMOTE · ENTER THIS PIN", 11, 500, 0x8CFFFFFF, 0.12f));
             card.addView(text(pin, 48, 300, 0xFFFFFFFF, 0.35f));
             card.addView(text(url, 14, 400, 0xB3FFFFFF, 0f));
+            // Whose phone asked, so an unexpected PIN (someone else on the Wi-Fi) is obvious.
+            if (from != null && !from.isEmpty()) card.addView(text("requested from " + from, 12, 400, 0x99FFFFFF, 0.02f));
 
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                     WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
