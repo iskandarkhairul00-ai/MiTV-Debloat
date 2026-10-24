@@ -45,8 +45,11 @@ final class DockConfig {
         return f.isFile() ? f.lastModified() ^ f.length() : 0;
     }
 
+    /** dock.txt: external storage so it can be pushed over ADB, internal if there is none. */
     private static File file(Context ctx) {
-        return new File(ctx.getExternalFilesDir(null), "dock.txt");
+        File dir = ctx.getExternalFilesDir(null);
+        if (dir == null) dir = ctx.getFilesDir(); // no external storage mounted
+        return new File(dir, "dock.txt");
     }
 
     static synchronized List<String> load(Context ctx) {

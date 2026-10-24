@@ -33,8 +33,11 @@ final class AppManager {
 
     private AppManager() {}
 
+    /** The remote's disable log: external storage so restore.sh can read it, internal if absent. */
     private static File log(Context ctx) {
-        return new File(ctx.getExternalFilesDir(null), "disabled-by-remote.txt");
+        File dir = ctx.getExternalFilesDir(null);
+        if (dir == null) dir = ctx.getFilesDir(); // no external storage mounted
+        return new File(dir, "disabled-by-remote.txt");
     }
 
     /** Apps the remote disabled, oldest first. */
