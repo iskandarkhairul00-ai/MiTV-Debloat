@@ -244,6 +244,14 @@ public class MainActivity extends Activity {
         screenH = getResources().getDisplayMetrics().heightPixels;
         prefs = getSharedPreferences("home", MODE_PRIVATE);
 
+        // Bell: Bluetooth names and the ACL connect/disconnect broadcasts need BLUETOOTH_CONNECT
+        // on Android 12+, and it is a runtime permission. Ask on a fresh start; without it those
+        // alerts simply don't appear (the rest of the bell is unaffected).
+        if (savedInstanceState == null && Build.VERSION.SDK_INT >= 31
+                && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Manifest.permission.BLUETOOTH_CONNECT}, 0);
+        }
+
         page = findViewById(R.id.page);
         wallpaper = findViewById(R.id.wallpaper);
         highlight = findViewById(R.id.highlight);
