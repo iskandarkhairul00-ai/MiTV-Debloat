@@ -21,6 +21,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
     private AlertSources alertSources;
     private Azan azan;
     private SleepTimer sleepTimer;
+    private StatusOverlay statusBar;
 
     /** Banners and the PIN card over other apps keep the launcher's proportions (UiScale). */
     @Override
@@ -44,6 +45,8 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         alertSources.start();
         azan = new Azan(this, netBanner);
         azan.start();
+        statusBar = new StatusOverlay(this);
+        statusBar.start();
     }
 
     private Notification notification() {
@@ -103,6 +106,7 @@ public class RemoteService extends Service implements LauncherSettings.Listener 
         if (alertSources != null) alertSources.stop();
         if (azan != null) azan.stop();
         if (sleepTimer != null) sleepTimer.stop();
+        if (statusBar != null) statusBar.stop();
         super.onDestroy();
     }
 

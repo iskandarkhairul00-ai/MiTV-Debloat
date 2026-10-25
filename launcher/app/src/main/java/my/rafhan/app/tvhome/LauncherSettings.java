@@ -25,7 +25,13 @@ final class LauncherSettings {
             ALERT_MEMORY = "alert_memory", MEMORY_LEVEL = "memory_level", NET_BANNER = "net_banner",
             REMOTE = "remote_on", WALLPAPER = "wallpaper", WEEK_START = "week_start",
             AZAN = "azan", AZAN_TEST = "azan_test",
-            PRAYER_REMINDER = "prayer_reminder";
+            PRAYER_REMINDER = "prayer_reminder",
+            STATUS_BAR = "status_bar", STATUS_LEFT = "status_left", STATUS_CENTER = "status_center",
+            STATUS_RIGHT = "status_right", STATUS_POS = "status_position", STATUS_SIZE = "status_size",
+            STATUS_BG = "status_background";
+
+    /** What a status-bar slot shows. */
+    static final int SLOT_NONE = 0, SLOT_SPEED = 1, SLOT_UPTIME = 2, SLOT_CLOCK = 3, SLOT_ELAPSED = 4;
 
     /** Clock format: follow the TV, or force one. */
     static final int CLOCK_AUTO = 0, CLOCK_12 = 1, CLOCK_24 = 2;
@@ -65,7 +71,12 @@ final class LauncherSettings {
     }
 
     static boolean flag(Context ctx, String key) {
-        return prefs(ctx).getBoolean(key, true); // every switch starts on
+        return prefs(ctx).getBoolean(key, defaultFlag(key));
+    }
+
+    /** Every switch starts on, except the info overlay: it would double up with an overlay app. */
+    private static boolean defaultFlag(String key) {
+        return !STATUS_BAR.equals(key);
     }
 
     static void setFlag(Context ctx, String key, boolean on) {
@@ -88,6 +99,10 @@ final class LauncherSettings {
             case MEMORY_LEVEL: return 85; // %
             case WEEK_START: return 1;    // DayOfWeek: 1 = Monday, 7 = Sunday
             case PRAYER_REMINDER: return 5; // minutes before each prayer; 0 = off
+            case STATUS_LEFT: return SLOT_SPEED;
+            case STATUS_CENTER: return SLOT_UPTIME;
+            case STATUS_RIGHT: return SLOT_CLOCK;
+            case STATUS_SIZE: return 14;  // sp
             default: return 0;
         }
     }

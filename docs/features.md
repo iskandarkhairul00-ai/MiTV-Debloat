@@ -58,6 +58,16 @@ Device and memory alerts also slide in a short banner over any app. The list is 
 - **"No internet"** uses Android's own internet check. It also appears behind a captive portal, and when Private DNS can't be reached.
 - **Settling:** changes are settled for 3 s, and a fresh connection gets 10 s to pass the internet check, so a normal reconnect doesn't flash "no internet".
 
+## Info overlay over apps
+
+A thin bar over every other app: **network speed** (`↓ 1.2 Mb  ↑ 34 Kb`), **uptime** (`23h6m`, or `2d1h55m`), a **clock** with seconds (`15:05:36`, always 24-hour) and **elapsed time** since you left the home screen (`04:07`, or `1:04:07` past an hour; it starts again when you go back home or the screen turns off). Turn it on in **Settings → Info overlay → Show over apps**; it's off by default.
+
+- **Never on the home screen** (which has its own clock and System card), and not while the screen is off. It comes back as soon as an app is in front.
+- **Options:** what the left, centre and right show (any of the four, or nothing), top or bottom of the screen, text size (Small 12 / Medium 14 / Large 18), and a dark see-through background. The phone remote's Settings tab has the same options.
+- **Speed** is all traffic in and out of the TV (`TrafficStats`), in decimal bits per second, updated every 2 s.
+- **Cost:** it ticks once a second only while it's showing. On the home screen, with the screen off or switched off, nothing runs.
+- It can't be focused or touched, so it never takes a key press from the app underneath.
+
 ## Now Playing
 
 Under the System card, whenever an app has a media session (RadioStream, Spotify, music apps):
@@ -93,6 +103,7 @@ The gear at the end of the top bar opens the launcher's Settings: categories on 
 | Prayer times | Zone (picker), prayer card on/off, azan on/off, reminder before prayer (Off / 5 / 10 / 15 / 30 min), play azan now |
 | Most used | Most used card on/off, week starts on (Monday / Sunday), leave out (app picker) |
 | Notifications | Play Store updates, new HDMI devices, Bluetooth, low memory (each on/off), low-memory level 80/85/90 %, connection banner |
+| Info overlay | Show over apps on/off (off by default), what the left, centre and right show (network speed / uptime / clock / elapsed time / nothing), position (top / bottom), text size (small / medium / large), background on/off |
 | Phone remote | Remote on/off (the banner and bell keep working when it's off), its address, forget all paired phones (press OK twice) |
 | Running apps | Apps hidden from the running-apps screen; OK shows one again |
 | About | Version, install time, APK size, TV settings |
@@ -103,7 +114,7 @@ The gear at the end of the top bar opens the launcher's Settings: categories on 
 - **The grid:** sorted the same way, most used first. Apps you haven't used stay A–Z after them. Both refresh every time you come back to the home screen.
 - **How time is counted, per day:**
   - **Visible time.** This counts watching HDMI or tuner through Live TV, which Android barely counts as "foreground".
-  - **Background playback (e.g. RadioStream audio)**, but only on days the app was also on screen. On this TV a group of always-on services, such as the NetSpeedTime overlay, MiLink and Live TV's service, log identical whole-day service times that aren't real use.
+  - **Background playback (e.g. RadioStream audio)**, but only on days the app was also on screen. On this TV a group of always-on services, such as an overlay app, MiLink and Live TV's service, log identical whole-day service times that aren't real use.
 - **Excluded apps:** Live TV (`com.mediatek.wwtv.tvcenter`) is left out of the ranking. It's only the screen for HDMI, AV and the antenna, so its time is input-watching time, not app use. It isn't on the card or in the total, and it stays in A–Z order in the grid. To leave out more apps, tick them in **Settings → Most used → Leave out** (`usage_excluded` in apps.xml is only the default).
 - **Usage access:** granted by `scripts/build-and-install.sh` with `adb shell appops set my.rafhan.app.tvhome GET_USAGE_STATS allow`. Without it the card shows that command and the grid stays A–Z.
 - **History:** the launcher keeps its own copy of each day's times for the last 7 days (`files/usage-history.json`), which always includes the week's first day whichever day it starts, because this TV has no clock battery: after a power cut it boots thinking it's 1974 until internet time fixes the clock, and that jump pushes Android's own usage history out of the week. The copy is only saved while the clock is right, and each day counts whichever is larger, the copy or Android's figure. Standby doesn't affect any of this; only a real power-off does.

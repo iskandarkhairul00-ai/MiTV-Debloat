@@ -42,14 +42,14 @@ final class SettingsScreen {
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, GREEN = 0xFF34C759, AMBER = 0xFFFFB340;
     private static final int TOGGLE = 0, CHOICE = 1, PICKER = 2, ACTION = 3, INFO = 4, CHECK = 5;
 
-    private static final int HOME = 0, PRAYER = 1, USAGE = 2, ALERTS = 3, REMOTE = 4, HIDDEN = 5; // About: 6
+    private static final int HOME = 0, PRAYER = 1, USAGE = 2, ALERTS = 3, STATUS = 4, REMOTE = 5, HIDDEN = 6; // About: 7
     private static final String[] CATS = {"Home screen", "Prayer times", "Most used", "Notifications",
-            "Phone remote", "Running apps", "About"};
+            "Info overlay", "Phone remote", "Running apps", "About"};
     private static final String[] CAT_SUBS = {"Cards, clock and wallpaper", "Zone and card",
-            "Your top apps this week", "What the bell tells you", "Control the TV from your phone", "Apps hidden from the list",
-            "Version and TV settings"};
+            "Your top apps this week", "What the bell tells you", "Speed, uptime and clock over apps",
+            "Control the TV from your phone", "Apps hidden from the list", "Version and TV settings"};
     private static final int[] CAT_ICONS = {R.drawable.ic_tv, R.drawable.ic_crescent, R.drawable.ic_chart, R.drawable.ic_bell,
-            R.drawable.ic_phone, R.drawable.ic_ram, R.drawable.ic_info};
+            R.drawable.ic_status_bar, R.drawable.ic_phone, R.drawable.ic_ram, R.drawable.ic_info};
     private static final String LIVE_TV = "com.mediatek.wwtv.tvcenter";
 
     interface Host {
@@ -344,6 +344,7 @@ final class SettingsScreen {
             case PRAYER: prayerRows(out); break;
             case USAGE: usageRows(out); break;
             case ALERTS: alertRows(out); break;
+            case STATUS: statusRows(out); break;
             case REMOTE: remoteRows(out); break;
             case HIDDEN: hiddenRows(out); break;
             default: aboutRows(out); break;
@@ -416,6 +417,22 @@ final class SettingsScreen {
                 new int[] {80, 85, 90}, new String[] {"80 %", "85 %", "90 %"}));
         out.add(toggle(LauncherSettings.NET_BANNER, "Connection banner",
                 "Wi-Fi connected, disconnected or no internet, over any app"));
+    }
+
+    private void statusRows(List<Row> out) {
+        out.add(toggle(LauncherSettings.STATUS_BAR, "Show over apps",
+                "A thin bar over every app, never on the home screen"));
+        out.add(choice(LauncherSettings.STATUS_LEFT, "Left", "What the left end shows",
+                StatusOverlay.SLOT_VALUES, StatusOverlay.SLOT_NAMES));
+        out.add(choice(LauncherSettings.STATUS_CENTER, "Centre", "What the middle shows",
+                StatusOverlay.SLOT_VALUES, StatusOverlay.SLOT_NAMES));
+        out.add(choice(LauncherSettings.STATUS_RIGHT, "Right", "What the right end shows",
+                StatusOverlay.SLOT_VALUES, StatusOverlay.SLOT_NAMES));
+        out.add(choice(LauncherSettings.STATUS_POS, "Position", "Top or bottom edge of the screen",
+                StatusOverlay.POS_VALUES, StatusOverlay.POS_NAMES));
+        out.add(choice(LauncherSettings.STATUS_SIZE, "Text size", "Small 12, Medium 14, Large 18",
+                StatusOverlay.SIZE_VALUES, StatusOverlay.SIZE_NAMES));
+        out.add(toggle(LauncherSettings.STATUS_BG, "Background", "A dark see-through box behind the text"));
     }
 
     private void remoteRows(List<Row> out) {

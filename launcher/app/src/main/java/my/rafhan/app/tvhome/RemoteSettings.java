@@ -88,6 +88,20 @@ final class RemoteSettings {
                         new int[] {80, 85, 90}, new String[] {"80 %", "85 %", "90 %"}),
                 toggle(LauncherSettings.NET_BANNER, "Connection banner",
                         "Wi-Fi connected, disconnected or no internet, over any app")));
+        cats.put(category("Info overlay", "Speed, uptime and clock over apps",
+                toggle(LauncherSettings.STATUS_BAR, "Show over apps",
+                        "A thin bar over every app, never on the home screen"),
+                choice(LauncherSettings.STATUS_LEFT, "Left", "What the left end shows",
+                        StatusOverlay.SLOT_VALUES, StatusOverlay.SLOT_NAMES),
+                choice(LauncherSettings.STATUS_CENTER, "Centre", "What the middle shows",
+                        StatusOverlay.SLOT_VALUES, StatusOverlay.SLOT_NAMES),
+                choice(LauncherSettings.STATUS_RIGHT, "Right", "What the right end shows",
+                        StatusOverlay.SLOT_VALUES, StatusOverlay.SLOT_NAMES),
+                choice(LauncherSettings.STATUS_POS, "Position", "Top or bottom edge of the screen",
+                        StatusOverlay.POS_VALUES, StatusOverlay.POS_NAMES),
+                choice(LauncherSettings.STATUS_SIZE, "Text size", "Small 12, Medium 14, Large 18",
+                        StatusOverlay.SIZE_VALUES, StatusOverlay.SIZE_NAMES),
+                toggle(LauncherSettings.STATUS_BG, "Background", "A dark see-through box behind the text")));
         return new JSONObject().put("ok", true).put("categories", cats);
     }
 

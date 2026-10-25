@@ -61,6 +61,7 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
         <li><b>Wallpapers</b>: Bing's photo of the day (scenery only, no people), seven photos from Wikimedia Commons, previewed as you move through the list, plus your own pictures from a <code>Wallpapers</code> folder.</li>
         <li><b>Notifications bell</b>: Play Store updates, new HDMI devices, Bluetooth devices and low memory.</li>
         <li><b>Connection banner</b> over any app when Wi-Fi drops or loses internet.</li>
+        <li><b>Info overlay</b> over apps (optional): network speed, uptime, a clock with seconds and time since you left the home screen; hidden on the home screen.</li>
         <li><b>Inputs</b> menu for HDMI 1–3, AV and Live TV.</li>
         <li>Light: a 0.65 MB app that starts about 3× faster than the stock launcher, uses about a third less memory after navigating, and has a quarter of its janky frames (<a href="#benchmark">benchmark</a>).</li>
       </ul>
