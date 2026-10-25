@@ -72,21 +72,22 @@ Gradle needs Java 17+: `export JAVA_HOME="$(/usr/libexec/java_home -v 17+)"` on 
 
 ## Benchmark
 
-Measured with `scripts/benchmark.sh <home component> <label>`, using the optimised R8 release build. Conditions:
+Measured on 2026-10-25 with `scripts/benchmark.sh <home component> <label>`, using the optimised R8 release build of launcher 1.8. Conditions:
 - Nothing was playing, and USB debugging was on.
-- The stock launcher ran without its recommendation services, which this setup disables.
+- The stock launcher ran without its recommendation services, which this setup disables. It was enabled only for its own run (with it enabled, Home keeps going to it), then disabled again before this launcher's run.
 
-| | This launcher | Stock Android TV launcher |
+| | This launcher (1.8) | Stock Android TV launcher |
 |---|---|---|
-| Memory, idle, settled / after navigating (PSS) | **44 / 75 MB** | 94 / 124 MB |
-| CPU, idle, 60 s | 0.19 s | 0.14 s |
-| Cold start (process killed → first frame) | 0.60–1.05 s | 0.56–0.81 s |
-| Back to home from an app (wait time) | 233–308 ms | 214–284 ms |
-| Janky frames while navigating | **7.6 % (43/566)** | 18.9 % (62/328) |
-| Frame time p50 / p90 / p99 | 8 / **10** / 65 ms | 6 / 27 / 69 ms |
-| APK size | 0.6 MB | 12.7 MB |
+| Memory, idle / after navigating (PSS) | 88 / **83 MB** | 87 / 122 MB |
+| CPU, idle, 60 s | 0.15 s | 0.11 s |
+| Cold start (process killed → first frame) | **0.51–0.57 s** | 1.49–1.59 s |
+| Back to home from an app (wait time) | 22–24 ms | 17–20 ms |
+| Janky frames while navigating | **5.8 % (33/567)** | 22.4 % (74/331) |
+| Frame time p50 / p90 / p99 | 7 / **8** / 61 ms | 5 / 22 / 40 ms |
+| APK size | **0.65 MB** | 12.7 MB |
 
 **Notes:**
+- **Idle memory depends on the graphics buffers.** About 45 MB of this launcher's PSS is GPU memory (`GL mtrack`: the window's buffers, the wallpaper and the tile textures). Whether they're all allocated when the idle sample is taken changes the idle figure a lot: earlier runs measured 44–51 MB idle, this one 88 MB, settling at 82 MB a few minutes later. The after-navigating figure, when everything is drawn, is steady across runs (75–83 MB) and is the fairer comparison.
 - **Extra processes only while used:** the launcher is a single process at idle. The Now Playing helper (~23 MB) runs only while something plays, and the virtual keypad (~21 MB) only for 5 minutes after a phone-remote key press inside an app.
 - **Screensaver:** under the screensaver the launcher uses no CPU (0 ticks in 60 s). The System card refreshes every 5 s, and only while home is on screen and in focus.
 - **Other apps in front:** after 30 s with another full-screen app in front, the app-list tile images are freed and redrawn on return. Hardware bitmaps live in graphics memory, so this saving doesn't show up in PSS.

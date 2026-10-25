@@ -62,7 +62,7 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
         <li><b>Notifications bell</b>: Play Store updates, new HDMI devices, Bluetooth devices and low memory.</li>
         <li><b>Connection banner</b> over any app when Wi-Fi drops or loses internet.</li>
         <li><b>Inputs</b> menu for HDMI 1–3, AV and Live TV.</li>
-        <li>Light: a 0.6 MB app that uses about half the stock launcher's memory, with less than half its janky frames (<a href="#benchmark">benchmark</a>).</li>
+        <li>Light: a 0.65 MB app that starts about 3× faster than the stock launcher, uses about a third less memory after navigating, and has a quarter of its janky frames (<a href="#benchmark">benchmark</a>).</li>
       </ul>
     </td>
   </tr>
@@ -117,17 +117,17 @@ More: [how every feature works](docs/features.md).
 
 ## Benchmark
 
-Against the stock Android TV launcher on the Mi TV (2026-10-22). Method and notes: [development.md](docs/development.md#benchmark).
+Against the stock Android TV launcher on the Mi TV (2026-10-25, launcher 1.8). Method and notes: [development.md](docs/development.md#benchmark).
 
-| | This launcher | Stock Android TV launcher |
+| | This launcher (1.8) | Stock Android TV launcher |
 |---|---|---|
-| Memory, idle, settled / after navigating (PSS) | **44 / 75 MB** | 94 / 124 MB |
-| CPU, idle, 60 s | 0.19 s | 0.14 s |
-| Cold start (process killed → first frame) | 0.60–1.05 s | 0.56–0.81 s |
-| Back to home from an app (wait time) | 233–308 ms | 214–284 ms |
-| Janky frames while navigating | **7.6 % (43/566)** | 18.9 % (62/328) |
-| Frame time p50 / p90 / p99 | 8 / **10** / 65 ms | 6 / 27 / 69 ms |
-| APK size | 0.6 MB | 12.7 MB |
+| Memory, idle / after navigating (PSS) | 88 / **83 MB** | 87 / 122 MB |
+| CPU, idle, 60 s | 0.15 s | 0.11 s |
+| Cold start (process killed → first frame) | **0.51–0.57 s** | 1.49–1.59 s |
+| Back to home from an app (wait time) | 22–24 ms | 17–20 ms |
+| Janky frames while navigating | **5.8 % (33/567)** | 22.4 % (74/331) |
+| Frame time p50 / p90 / p99 | 7 / **8** / 61 ms | 5 / 22 / 40 ms |
+| APK size | **0.65 MB** | 12.7 MB |
 
 ## Security
 
