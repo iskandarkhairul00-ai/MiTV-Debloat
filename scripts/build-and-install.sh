@@ -65,8 +65,18 @@ APK=launcher/app/build/outputs/apk/release/app-release.apk
 
 # Push + pm install instead of `adb install`: on some sets adb install waits for an on-screen confirmation.
 A push "$APK" /data/local/tmp/tvhome.apk >/dev/null
-A shell pm install -r /data/local/tmp/tvhome.apk
+INSTALL="$(A shell pm install -r /data/local/tmp/tvhome.apk 2>&1 | tr -d '\r' || true)"
 A shell rm /data/local/tmp/tvhome.apk
+echo "$INSTALL"
+case "$INSTALL" in
+  *UPDATE_INCOMPATIBLE*)
+    die "the launcher on the TV was signed with a different key (for example a GitHub Release, or a
+build from another computer). Uninstall it once, which resets its settings, then run this again:
+  adb -s $TV uninstall $PKG
+Or sign your builds with the project's release key (docs/development.md)." ;;
+  *Success*) ;;
+  *) die "the TV refused the install (above)." ;;
+esac
 
 # Optional permissions: a TV that refuses one just loses that feature, so carry on.
 opt() { A shell "$@" >/dev/null 2>&1 || echo "note: '$*' was refused by this TV (that feature may be limited)"; }

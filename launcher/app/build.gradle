@@ -2,6 +2,16 @@ plugins {
     id 'com.android.application'
 }
 
+// Release signing: one fixed key, so every build (CI or any computer) upgrades the last one in
+// place and the TV keeps the launcher's settings. The key comes from environment variables (CI
+// secrets) or launcher/keystore.properties (git-ignored; see docs/development.md). Without it,
+// release builds fall back to this computer's debug key, as before.
+def keyProps = new Properties()
+def keyPropsFile = rootProject.file('keystore.properties')
+if (keyPropsFile.exists()) keyPropsFile.withInputStream { keyProps.load(it) }
+def signing = { String env, String prop -> System.getenv(env) ?: keyProps.getProperty(prop) }
+def releaseStore = signing('SIGNING_STORE_FILE', 'storeFile')
+
 android {
     namespace 'my.rafhan.app.tvhome'
     compileSdk 36
@@ -14,14 +24,25 @@ android {
         versionName '1.9'
     }
 
+    signingConfigs {
+        release {
+            if (releaseStore) {
+                storeFile rootProject.file(releaseStore)
+                storePassword signing('SIGNING_STORE_PASSWORD', 'storePassword')
+                keyAlias signing('SIGNING_KEY_ALIAS', 'keyAlias')
+                keyPassword signing('SIGNING_KEY_PASSWORD', 'keyPassword')
+            }
+        }
+    }
+
     buildTypes {
-        // What build-and-install.sh installs: R8-shrunk code and resources. Signed with the debug
-        // key so it upgrades the existing install in place (same signature, data kept).
+        // What build-and-install.sh installs and GitHub Releases publish: R8-shrunk code and
+        // resources, signed with the release key when there is one (see the top of this file).
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.debug
+            signingConfig releaseStore ? signingConfigs.release : signingConfigs.debug
         }
     }
 

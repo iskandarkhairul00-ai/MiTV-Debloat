@@ -45,7 +45,51 @@ Notes on the install:
 - While the stock launcher is enabled, it always wins (its priority is 2). That's why it has to be disabled.
 - **New TV IP:** run `TV=<new-ip> scripts/build-and-install.sh` once; the new address is saved in `.tv` for every script.
 - **Adding a permission:** adding a permission like INTERNET to an already-installed app doesn't reach the network firewall on Android 10, so the app gets `EPERM` on sockets. If you ever add one, reinstall cleanly: `adb shell pm uninstall my.rafhan.app.tvhome && scripts/build-and-install.sh`.
-- **Signing:** the release APK is signed with the computer's debug key, so it upgrades an install in place only when built on the same machine. Built elsewhere, uninstall once (`adb shell pm uninstall my.rafhan.app.tvhome`) and install again; the launcher's settings and the paired phones are lost.
+- **Signing:** release builds are signed with the project's release key when it's available (CI secrets, or `launcher/keystore.properties` on your computer; see [Release signing and GitHub Releases](#release-signing-and-github-releases)), so any build upgrades any other in place. Without the key, they're signed with this computer's debug key, which only upgrades an install built on the same computer. Switching between the two needs one uninstall (`adb shell pm uninstall my.rafhan.app.tvhome`), which loses the launcher's settings and the paired phones.
+
+## Release signing and GitHub Releases
+
+Every CI build is signed with one fixed **release key**, kept in the repository's secrets. So an APK from GitHub installs over the previous one and the TV keeps the launcher's settings. A version tag publishes the APK as a **GitHub Release**, which anyone can download without signing in.
+
+### One-time setup (the repository owner)
+
+You need the JDK's `keytool` (from step 2 of the install guide) and the GitHub CLI (`gh`, signed in with `gh auth login`).
+
+1. **Create the key** (it asks for a password; pick a strong one and store it in your password manager):
+   ```bash
+   keytool -genkeypair -v -keystore tvhome-release.jks -alias tvhome \
+     -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=TV Home"
+   ```
+   **Back up `tvhome-release.jks` and its password** somewhere safe and private (not in the repository). If you lose them, no future build can update the installed launcher without an uninstall.
+2. **Give it to CI** as four repository secrets (run in the repository folder):
+   ```bash
+   base64 < tvhome-release.jks | tr -d '\n' | gh secret set SIGNING_KEYSTORE_BASE64
+   gh secret set SIGNING_STORE_PASSWORD      # paste the password, then Enter
+   gh secret set SIGNING_KEY_PASSWORD        # the same password (keytool uses one for both)
+   gh secret set SIGNING_KEY_ALIAS --body tvhome
+   ```
+   Or add them on GitHub: the repository → Settings → Secrets and variables → Actions → New repository secret. For `SIGNING_KEYSTORE_BASE64`, paste the output of `base64 < tvhome-release.jks | tr -d '\n'`.
+3. **Optional, to sign your own builds with it too** (so `scripts/build-and-install.sh` and GitHub Releases can update each other): create `launcher/keystore.properties` (git ignores it):
+   ```properties
+   storeFile=/full/path/to/tvhome-release.jks
+   storePassword=your-password
+   keyAlias=tvhome
+   keyPassword=your-password
+   ```
+
+Check it worked: the next CI run's *Release signing key* step runs instead of being skipped. On your computer, `apksigner verify --print-certs launcher/app/build/outputs/apk/release/app-release.apk` shows `CN=TV Home`.
+
+### Publishing a version
+
+1. Bump `versionCode` (by 1) and `versionName` in `launcher/app/build.gradle`, and commit.
+2. Tag the commit with `v` + the versionName and push the tag:
+   ```bash
+   git tag v1.9
+   git push origin master v1.9
+   ```
+3. CI builds and tests it, then creates the release **TV Home 1.9** with `tvhome-1.9.apk` and notes generated from the commits.
+
+The release job refuses to publish if the tag doesn't match `versionName`, or if the signing secrets are missing (a debug-signed release couldn't be updated later without losing settings).
 
 ## Tests and CI
 

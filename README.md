@@ -89,6 +89,7 @@ Recorded on the TV (2 minutes, no sound): the dock's name and glow following foc
 You need an Android TV or Google TV running Android 10 or newer, and a computer on the same Wi-Fi. The scripts build the launcher, install it over network ADB and make it the home screen; they work with any TV brand.
 
 - Step by step: [Windows](docs/install-windows.md) · [macOS](docs/install-macos.md) · [Linux](docs/install-linux.md)
+- No build tools? Download the ready-made APK from [Releases](https://github.com/nullifye/MiTV-Debloat/releases/latest) and install it with only adb: [Windows](docs/install-windows.md#install-the-ready-made-apk-instead-no-building) · [macOS](docs/install-macos.md#install-the-ready-made-apk-instead-no-building) · [Linux](docs/install-linux.md#install-the-ready-made-apk-instead-no-building)
 - Let an AI coding agent do it: [Install with an AI agent](docs/install-with-ai-agent.md)
 - Debloat the TV too, from scratch: give an AI agent [PROMPT.md](PROMPT.md)
 
@@ -137,7 +138,7 @@ This setup is meant for a TV on your own network, and it deliberately makes the 
 - **USB debugging stays on** (port 5555): anyone on your Wi-Fi can connect with `adb` and control the TV. The launcher uses the same loopback connection for the remote's D-pad and keyboard inside apps, screenshots, sleep/restart and disabling apps. Turn it off in Developer options when you don't need those — the rest of the phone remote keeps working.
 - **What the launcher is granted over ADB:** "draw over other apps" (the pairing PIN and messages over any app), an accessibility service (Back and Home from the remote), `DUMP` (Now Playing without USB debugging) and All files access (the Files tab and the `Wallpapers` folder). The accessibility service can see what's on screen; it only ever sends Back and Home.
 - **The phone remote is plain HTTP on port 8486.** Pairing needs a six-digit PIN shown on the TV (five tries, then a lockout that grows to 15 minutes), and the server refuses requests whose `Host` isn't an IP address and any cross-site request, so a web page can't drive the TV. Traffic isn't encrypted though: keep the TV on a trusted WPA2/WPA3 network, never forward the port from your router, and use Settings → Phone remote → Forget all phones if you lose a phone.
-- **The release APK is signed with the debug key**, so it upgrades only an install built on the same machine. To switch machines (or to distribute it), uninstall once and reinstall; see [development.md](docs/development.md).
+- **Releases are signed with the project's own key**, so every GitHub Release updates the last one in place, settings kept. Building it yourself without that key signs with your computer's debug key instead: switching between a self-built and a downloaded APK needs one uninstall, which resets the launcher's settings. See [development.md](docs/development.md#release-signing-and-github-releases).
 
 `scripts/restore.sh` undoes the grants and the home-screen change.
 
