@@ -102,7 +102,7 @@ final class LauncherSettings {
             case STATUS_LEFT: return SLOT_SPEED;
             case STATUS_CENTER: return SLOT_UPTIME;
             case STATUS_RIGHT: return SLOT_CLOCK;
-            case STATUS_SIZE: return 14;  // sp
+            case STATUS_SIZE: return 12;  // sp: Small
             default: return 0;
         }
     }

@@ -159,11 +159,15 @@ if [ "${1:-}" = "--disable-stock" ]; then
 fi
 
 A shell input keyevent KEYCODE_HOME
-sleep 3
 # What's actually in front after pressing Home: set-home-activity can say Success while Home still
-# goes to the TV's own launcher, so check the focused app rather than the resolver's answer.
-FOCUS="$(A shell dumpsys window | tr -d '\r' | grep mFocusedApp | head -1 || true)"
-[ -n "$FOCUS" ] || FOCUS="$(A shell dumpsys activity activities | tr -d '\r' | grep ResumedActivity | head -1 || true)"
+# goes to the TV's own launcher, so check the focused app rather than the resolver's answer. A fresh
+# install takes a few seconds to start, so give it up to 12 s.
+for _ in 1 2 3 4 5 6; do
+  sleep 2
+  FOCUS="$(A shell dumpsys window | tr -d '\r' | grep mFocusedApp | head -1 || true)"
+  [ -n "$FOCUS" ] || FOCUS="$(A shell dumpsys activity activities | tr -d '\r' | grep ResumedActivity | head -1 || true)"
+  case "$FOCUS" in *"$PKG/"*) break ;; esac
+done
 case "$FOCUS" in
   *"$PKG/"*) echo "Installed. Home opens this launcher." ;;
   *)
