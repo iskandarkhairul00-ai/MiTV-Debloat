@@ -12,4 +12,8 @@ if [ -z "${TV:-}" ]; then
   echo "  TV=192.168.1.50 $0 $*" >&2
   exit 1
 fi
-A() { adb -s "$TV" "$@"; }
+# On Windows the bash shells rewrite arguments that look like Unix paths into Windows ones, so a
+# path on the TV such as /data/local/tmp/x.apk would reach adb as C:/Program Files/Git/data/...
+# Switch that off for adb: MSYS_NO_PATHCONV for Git Bash, MSYS2_ARG_CONV_EXCL for MSYS2 (UCRT64,
+# MINGW64). Local files given to adb are relative paths, which need no rewriting.
+A() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' adb -s "$TV" "$@"; }

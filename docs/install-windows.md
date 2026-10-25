@@ -123,6 +123,7 @@ With debugging off, a few extras are limited: the phone remote can't move the cu
 |---|---|
 | `adb: command not found` (or `java`) in Git Bash | Close Git Bash and open a new window after installing. If it still fails, restart Windows. |
 | `bad interpreter: /bin/bash^M` | Windows line endings got into the scripts. Run `git config --global core.autocrlf input`, then delete the folder and clone again. |
+| `adb: error: failed to copy ... to 'C:/Program Files/Git/data/local/tmp/...'` | An older copy of the scripts: the shell turned the TV's path into a Windows one. Run `git pull` in the `MiTV-Debloat` folder and run the script again. Git Bash and MSYS2 (UCRT64/MINGW64) both work now. |
 | `unauthorized` | Accept "Allow USB debugging?" on the TV. If it never appears, turn USB debugging off and on, run `adb kill-server`, and connect again. |
 | `can't reach the TV` / *No route to host* | Check the IP and that both are on the same Wi-Fi. Run `adb kill-server` and try again. |
 | `JDK 17 or newer is needed` | Install Temurin 17 (step 2a), then open a new Git Bash. |
