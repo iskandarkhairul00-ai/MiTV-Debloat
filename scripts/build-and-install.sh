@@ -3,8 +3,9 @@
 # Works on any Android TV / Google TV 10 or newer, from macOS, Linux or Windows (Git Bash).
 # Usage: TV=<ip> scripts/build-and-install.sh [--disable-stock]
 #   TV=<ip>          the TV's address, needed the first time only (saved in .tv)
-#   --disable-stock  also disables the TV's own launcher (logged, so restore.sh undoes it); needed
-#                    on Google TV, where Home otherwise keeps opening the stock launcher
+#   --disable-stock  also disables the TV's own launcher, and on Google TV its setup app (both
+#                    logged, so restore.sh undoes them); needed on Google TV, where Home otherwise
+#                    keeps opening the stock launcher
 # See docs/install-*.md for setting up a computer.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -118,9 +119,28 @@ opt pm grant $PKG android.permission.PACKAGE_USAGE_STATS
 A shell cmd package set-home-activity $PKG/.MainActivity
 
 if [ "${1:-}" = "--disable-stock" ]; then
+  # Google TV: the setup app also answers HOME, at a higher priority than any launcher, so with only
+  # the stock launcher disabled Home lands on setup (or the stock launcher takes it back). Disable
+  # setup first. Not when it owns the saved Wi-Fi network: disabling it deletes that network
+  # (re-join Wi-Fi from Settings, or use Ethernet, then run this again). Logged, so restore.sh
+  # turns it back on; re-enable it before a factory reset. Phone casting may stop after a reboot
+  # while it's off (the Cast receiver reads its credentials from it).
+  SETUP=com.google.android.tungsten.setupwraith
+  ENABLED="$(A shell pm list packages -e "$SETUP" | tr -d '\r' || true)"
+  if printf '%s\n' "$ENABLED" | grep -qx "package:$SETUP"; then
+    WIFI="$(A shell dumpsys wifi | tr -d '\r' | grep -o 'cname=[^ ]*' || true)"
+    if printf '%s\n' "$WIFI" | grep -q setupwraith; then
+      echo "note: $SETUP (Google TV setup) owns the saved Wi-Fi network, so it was left on: disabling it"
+      echo "      would delete the network. In Settings, forget the Wi-Fi network and join it again (or use"
+      echo "      Ethernet), then run this again."
+    else
+      scripts/disable.sh "$SETUP"
+    fi
+  fi
   STOCK="$(stock_home)"
   if [ -n "$STOCK" ]; then
     scripts/disable.sh "${STOCK%%/*}"
+    A shell cmd package set-home-activity $PKG/.MainActivity >/dev/null
   else
     echo "note: the TV's own launcher isn't known, so nothing was disabled. Home apps on this TV:"
     A shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | grep / | grep -v "$PKG" || true
@@ -128,7 +148,23 @@ if [ "${1:-}" = "--disable-stock" ]; then
   fi
 fi
 
-A shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null
-echo "Installed. HOME now resolves to:"
-A shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tail -1
-echo "If Home still opens the TV's own launcher (Google TV does this), run again with --disable-stock."
+A shell input keyevent KEYCODE_HOME
+sleep 3
+# What's actually in front after pressing Home: set-home-activity can say Success while Home still
+# goes to the TV's own launcher, so check the focused app rather than the resolver's answer.
+FOCUS="$(A shell dumpsys window | tr -d '\r' | grep mFocusedApp | head -1 || true)"
+[ -n "$FOCUS" ] || FOCUS="$(A shell dumpsys activity activities | tr -d '\r' | grep ResumedActivity | head -1 || true)"
+case "$FOCUS" in
+  *"$PKG/"*) echo "Installed. Home opens this launcher." ;;
+  *)
+    echo "Installed, but Home still opens something else:"
+    echo "  $(echo "$FOCUS" | sed 's/^ *//')"
+    echo "Apps on this TV that answer Home:"
+    A shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | grep / | grep -v "$PKG" || true
+    if [ "${1:-}" = "--disable-stock" ]; then
+      echo "Disable the one that keeps taking Home with: scripts/disable.sh <package>"
+    else
+      echo "Run again with --disable-stock (Google TV needs it)."
+    fi
+    ;;
+esac

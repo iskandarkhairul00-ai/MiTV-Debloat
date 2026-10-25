@@ -89,7 +89,11 @@ Press **Home** on the remote. If the TV's own launcher still opens (Google TV do
 scripts/build-and-install.sh --disable-stock
 ```
 
-This disables the TV's own launcher. It's logged, so `restore.sh` turns it back on.
+This disables the TV's own launcher. On Google TV it first disables Google TV's setup app too (`com.google.android.tungsten.setupwraith`), which also answers Home and would otherwise take it. Both are logged, so `restore.sh` turns them back on. The script then presses Home and tells you whether this launcher came up.
+
+On Google TV, two things to know:
+- **Wi-Fi:** if the setup app owns the saved Wi-Fi network, disabling it would delete that network, so the script leaves it on and says so. Forget the network in Settings and join it again (or use Ethernet), then run the script again.
+- **Casting from your phone** may stop working after a reboot while the setup app is off. Run `scripts/restore.sh` before a factory reset.
 
 To update the launcher later: `git pull`, then run `scripts/build-and-install.sh` again. Your settings are kept.
 
