@@ -1079,8 +1079,12 @@ public class MainActivity extends Activity {
                     if (e.getRepeatCount() == 0) armedKey = code;
                 } else if (armedKey == code) {
                     armedKey = KeyEvent.KEYCODE_UNKNOWN;
-                    if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE) onBack();
-                    else onSelect();
+                    if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE) {
+    long now = SystemClock.uptimeMillis();
+    if (now - lastBackUp < 400) { lastBackUp = 0; openScreensaver(); return true; }
+    lastBackUp = now;
+    onBack();
+} else onSelect();
                 }
                 return true;
             default:
@@ -1241,7 +1245,7 @@ public class MainActivity extends Activity {
                 break;
             case TOP:
                 if (topIdx == PILL_BELL) openBell();
-                else if (topIdx == PILL_INPUTS) openMenu();
+                else if (topIdx == PILL_INPUTS) openScreensaver();
                 else if (topIdx == PILL_WIFI) startSafely(new Intent(Settings.ACTION_WIFI_SETTINGS));
                 else if (topIdx == PILL_SOUND) openSound();
                 else openSettings();
