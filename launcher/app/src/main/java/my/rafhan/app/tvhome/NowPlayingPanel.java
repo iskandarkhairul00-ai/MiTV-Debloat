@@ -369,7 +369,7 @@ final class NowPlayingPanel {
     // ---------------------------------------------------------------- source 2: dumpsys
 
     private static final Pattern STATE = Pattern.compile(
-            "state=PlaybackState \\{state=(\\d+), position=(-?\\d+),.*?speed=([\\d.]+), updated=(\\d+), actions=(\\d+)");
+            "state=PlaybackState \\{state=(?:[A-Za-z_]+\\()?(\\d+)\\)?, position=(-?\\d+),.*?speed=([\\d.]+), updated=(\\d+), actions=(\\d+)");
 
     /**
      * Best session from `dumpsys media_session` (needs DUMP), or null. Blocking: run off the main
