@@ -130,8 +130,8 @@ public class MainActivity extends Activity {
     private final GradientDrawable glowDrawable = new GradientDrawable();
     private int glowColor = Color.TRANSPARENT;
     private ValueAnimator glowAnim;
-    // Top bar, left to right: bell, Inputs, Wi-Fi, Settings (icon-only round buttons).
-    private static final int PILL_BELL = 0, PILL_INPUTS = 1, PILL_WIFI = 2, PILL_SETTINGS = 3;
+    // Top bar, left to right: bell, Inputs, Wi-Fi, Sound, Settings (icon-only round buttons).
+    private static final int PILL_BELL = 0, PILL_INPUTS = 1, PILL_WIFI = 2, PILL_SOUND = 3, PILL_SETTINGS = 4;
     private View[] pills;
     private TextView bellBadge;
     private final Alerts.Listener alertsChanged = this::updateBell;
@@ -274,9 +274,7 @@ public class MainActivity extends Activity {
         grid = findViewById(R.id.grid);
         menu = findViewById(R.id.menu);
         pills = new View[] {findViewById(R.id.pillBell), findViewById(R.id.pillInputs), findViewById(R.id.pillWifi),
-                findViewById(R.id.pillSettings)};
-        // Settings is no longer on the TV home: it stays reachable from the phone remote.
-        pills[PILL_SETTINGS].setVisibility(View.GONE);
+                newSoundPill(), findViewById(R.id.pillSettings)};
         bellBadge = findViewById(R.id.bellBadge);
         bellBadge.setTypeface(Fonts.outfit(this, 600));
         homeViews = new View[] {findViewById(R.id.clockBlock), findViewById(R.id.pills), findViewById(R.id.dockBand),
@@ -1098,11 +1096,11 @@ public class MainActivity extends Activity {
                 else moveFocus(TOP, topIdx);
                 break;
             case REC:
-                moveFocus(TOP, Math.min(topIdx, PILL_WIFI));
+                moveFocus(TOP, topIdx);
                 break;
             case CONT:
                 if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
-                else moveFocus(TOP, Math.min(topIdx, PILL_WIFI));
+                else moveFocus(TOP, topIdx);
                 break;
             case NOW:
                 moveFocus(TOP, topIdx);
@@ -1181,7 +1179,7 @@ public class MainActivity extends Activity {
         switch (section) {
             case TOP: {
                 int i = topIdx + dir;
-                if (i >= 0 && i < pills.length - 1) moveFocus(TOP, i);
+                if (i >= 0 && i < pills.length) moveFocus(TOP, i);
                 break;
             }
             case DOCK: {
@@ -1239,6 +1237,7 @@ public class MainActivity extends Activity {
                 if (topIdx == PILL_BELL) openBell();
                 else if (topIdx == PILL_INPUTS) openMenu();
                 else if (topIdx == PILL_WIFI) startSafely(new Intent(Settings.ACTION_WIFI_SETTINGS));
+                else if (topIdx == PILL_SOUND) openSound();
                 else openSettings();
                 break;
             case DOCK:
@@ -1284,6 +1283,44 @@ public class MainActivity extends Activity {
         else if (section == GRID || section == TOP || section == NOW || section == REC || section == CONT) {
             if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
         }
+    }
+
+    /**
+     * The Sound button (speaker icon) is added to the top bar in code, just before the Settings
+     * gear, with the same look, size and margins as the Wi-Fi button.
+     */
+    private View newSoundPill() {
+        LinearLayout bar = findViewById(R.id.pills);
+        View wifi = findViewById(R.id.pillWifi), gear = findViewById(R.id.pillSettings);
+        ImageView sound = new ImageView(this, null, 0, R.style.IconPill);
+        sound.setImageResource(R.drawable.ic_sound);
+        sound.setContentDescription("Sound");
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams((LinearLayout.LayoutParams) wifi.getLayoutParams());
+        bar.addView(sound, bar.indexOfChild(gear), lp);
+        return sound;
+    }
+
+    /**
+     * Opens the TV's own sound settings, where the Dolby Atmos / Dolby Audio mode lives (the
+     * speaker processing is the TV maker's, so the launcher can't switch it itself). Tries the
+     * standard action first, then the stock Android TV Settings sound page, then Settings.
+     */
+    private void openSound() {
+        Intent[] tries = {
+            new Intent(Settings.ACTION_SOUND_SETTINGS),
+            new Intent().setClassName("com.android.tv.settings", "com.android.tv.settings.device.sound.SoundActivity"),
+            new Intent(Settings.ACTION_SETTINGS),
+        };
+        for (Intent in : tries) {
+            try {
+                in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(in);
+                return;
+            } catch (ActivityNotFoundException | SecurityException ignored) {
+                // try the next one
+            }
+        }
+        Toast.makeText(this, "Not available on this TV", Toast.LENGTH_SHORT).show();
     }
 
     private void startSafely(Intent intent) {
