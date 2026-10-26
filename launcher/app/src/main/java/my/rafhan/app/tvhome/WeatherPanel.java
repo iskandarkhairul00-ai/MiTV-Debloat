@@ -20,12 +20,11 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.concurrent.Executor;
 
 /**
- * Weather card: the forecast for 8 AM, 11 AM and 2 PM from Open-Meteo (no API key), refreshed at
+ * Weather card: ten slots, one every 3 hours starting now, from Open-Meteo (no API key), refreshed at
  * most every 30 minutes and cached in the app's files dir so it still shows offline. The current
  * weather code also drives the "Weather" wallpaper mode (see Wallpapers.rotating).
  *
@@ -37,9 +36,9 @@ final class WeatherPanel {
     private static final double LAT = 3.07, LON = 101.52;
     private static final String API = "https://api.open-meteo.com/v1/forecast?latitude=" + LAT
             + "&longitude=" + LON + "&current=temperature_2m,weather_code"
-            + "&hourly=temperature_2m,weather_code&forecast_days=2&timezone=auto";
+            + "&hourly=temperature_2m,weather_code&forecast_days=3&timezone=auto";
     private static final long MAX_AGE_MS = 30 * 60_000L;
-    private static final int[] HOURS = {8, 11, 14};
+    private static final int SLOTS = 10, STEP_H = 3;
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, NEXT = 0xFFFFC857;
 
     // "clear", "cloud", "rain", "storm" for the wallpaper; -1 = unknown.
@@ -50,9 +49,9 @@ final class WeatherPanel {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final float dp;
     private final TextView nowView;
-    private final TextView[] labels = new TextView[HOURS.length];
-    private final TextView[] temps = new TextView[HOURS.length];
-    private final ImageView[] icons = new ImageView[HOURS.length];
+    private final TextView[] labels = new TextView[SLOTS];
+    private final TextView[] temps = new TextView[SLOTS];
+    private final ImageView[] icons = new ImageView[SLOTS];
 
     private JSONObject data;
     private boolean fetching;
@@ -65,7 +64,7 @@ final class WeatherPanel {
 
         LinearLayout header = new LinearLayout(ctx);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(small("WEATHER", DIM, 10.5f));
+        header.addView(small("WEATHER · EVERY 3 HOURS", DIM, 10.5f));
         nowView = small("", NEXT, 10.5f);
         nowView.setGravity(Gravity.END);
         header.addView(nowView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -74,36 +73,33 @@ final class WeatherPanel {
         LinearLayout row = new LinearLayout(ctx);
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rlp.topMargin = px(8);
+        rlp.topMargin = px(6);
         root.addView(row, rlp);
-        for (int i = 0; i < HOURS.length; i++) {
+        for (int i = 0; i < SLOTS; i++) {
             LinearLayout cell = new LinearLayout(ctx);
-            cell.setOrientation(LinearLayout.HORIZONTAL);
-            cell.setGravity(Gravity.CENTER_VERTICAL);
+            cell.setOrientation(LinearLayout.VERTICAL);
+            cell.setGravity(Gravity.CENTER_HORIZONTAL);
             row.addView(cell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-            icons[i] = new ImageView(ctx);
-            cell.addView(icons[i], new LinearLayout.LayoutParams(px(26), px(26)));
+            labels[i] = small("", DIM, 9.5f);
+            labels[i].setLetterSpacing(0f);
+            cell.addView(labels[i]);
 
-            LinearLayout col = new LinearLayout(ctx);
-            col.setOrientation(LinearLayout.VERTICAL);
-            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            clp.setMarginStart(px(6));
-            cell.addView(col, clp);
+            icons[i] = new ImageView(ctx);
+            LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(px(22), px(22));
+            ilp.topMargin = px(3);
+            cell.addView(icons[i], ilp);
 
             temps[i] = new TextView(ctx);
-            temps[i].setTextSize(17f);
+            temps[i].setTextSize(15f);
             temps[i].setTypeface(Fonts.outfit(ctx, 500));
             temps[i].setTextColor(TEXT);
             temps[i].setIncludeFontPadding(false);
             temps[i].setText("--°");
-            col.addView(temps[i]);
-            labels[i] = small("", DIM, 9f);
-            LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            llp.topMargin = px(3);
-            col.addView(labels[i], llp);
+            tlp.topMargin = px(3);
+            cell.addView(temps[i], tlp);
         }
     }
 
@@ -173,13 +169,11 @@ final class WeatherPanel {
         JSONArray code = h.optJSONArray("weather_code");
         if (time == null || temp == null || code == null) return;
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime base = LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.HOURS);
         boolean h24 = LauncherSettings.use24h(ctx);
-        for (int i = 0; i < HOURS.length; i++) {
-            // A slot that has already passed today shows tomorrow's (dimmed).
-            boolean tomorrow = now.getHour() > HOURS[i];
-            LocalDate d = tomorrow ? now.toLocalDate().plusDays(1) : now.toLocalDate();
-            String key = d + String.format(java.util.Locale.US, "T%02d:00", HOURS[i]);
+        for (int i = 0; i < SLOTS; i++) {
+            LocalDateTime t = base.plusHours((long) i * STEP_H);
+            String key = t.toLocalDate() + String.format(java.util.Locale.US, "T%02d:00", t.getHour());
             int idx = -1;
             for (int k = 0; k < time.length(); k++) {
                 if (key.equals(time.optString(k))) {
@@ -187,17 +181,20 @@ final class WeatherPanel {
                     break;
                 }
             }
-            labels[i].setText(h24 ? String.format(java.util.Locale.US, "%02d:00", HOURS[i])
-                    : (HOURS[i] > 12 ? HOURS[i] - 12 : HOURS[i]) + (HOURS[i] >= 12 ? " PM" : " AM"));
+            int hr = t.getHour();
+            if (i == 0) labels[i].setText("Now");
+            else labels[i].setText(h24 ? String.format(java.util.Locale.US, "%02d:00", hr)
+                    : (hr % 12 == 0 ? 12 : hr % 12) + (hr >= 12 ? " PM" : " AM"));
+            labels[i].setTextColor(i == 0 ? NEXT : DIM);
             if (idx < 0) {
                 temps[i].setText("--°");
                 icons[i].setImageDrawable(null);
                 continue;
             }
             temps[i].setText(Math.round(temp.optDouble(idx)) + "°");
-            temps[i].setTextColor(tomorrow ? DIM : TEXT);
+            temps[i].setTextColor(TEXT);
             icons[i].setImageResource(iconOf(code.optInt(idx)));
-            icons[i].setAlpha(tomorrow ? 0.55f : 1f);
+            icons[i].setAlpha(1f);
         }
     }
 
