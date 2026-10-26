@@ -391,7 +391,9 @@ final class SettingsScreen {
         out.add(toggle(LauncherSettings.SHOW_NOW, "Now Playing card", "Cover, title and controls while something plays"));
         out.add(choice(LauncherSettings.WALL_DIM, "Wallpaper dim", "How dark the wallpaper is behind the cards",
                 new int[] {0, 1, 2, 3}, new String[] {"Off", "Low", "Medium", "High"}));
-        out.add(toggle(LauncherSettings.RAIN_FX, "Rain effect", "Falling rain over wallpapers named rain* or storm*"));
+        out.add(toggle(LauncherSettings.RAIN_FX, "Rain effect", "Rain falls over the home screen when it really rains; lightning in a thunderstorm"));
+        out.add(choice(LauncherSettings.RAIN_TEST, "Rain test", "Force the effect to see it now; Auto follows the real weather",
+                new int[] {0, 1, 2}, new String[] {"Auto", "Rain", "Storm"}));
         Row w = new Row(PICKER, "Wallpaper");
         w.sub = "Bing photo of the day, built-in photos or your own";
         String name = wallpaperName(LauncherSettings.wallpaper(ctx));
@@ -556,13 +558,13 @@ final class SettingsScreen {
         bing.action = () -> pickWallpaper(Wallpapers.BING);
         items.add(bing);
         Row rot = new Row(CHECK, "Rotate every 5 minutes");
-        rot.sub = "Cycles through the pictures in the Wallpapers folder";
+        rot.sub = "Cycles through the Wallpapers folder and the anime pack";
         rot.checked = Wallpapers.ROTATE.equals(current);
         rot.id = Wallpapers.ROTATE;
         rot.action = () -> pickWallpaper(Wallpapers.ROTATE);
         items.add(rot);
         Row wx = new Row(CHECK, "Weather + rotate every 5 minutes");
-        wx.sub = "Pictures named clear*, cloud*, rain*, storm* follow the weather";
+        wx.sub = "Pictures named clear*, cloud*, rain*, storm* follow the weather (the anime pack too)";
         wx.checked = Wallpapers.WEATHER.equals(current);
         wx.id = Wallpapers.WEATHER;
         wx.action = () -> pickWallpaper(Wallpapers.WEATHER);
@@ -570,7 +572,8 @@ final class SettingsScreen {
         for (Wallpapers.Photo p : Wallpapers.BUILT_IN) {
             Row r = new Row(CHECK, p.name);
             boolean cached = Wallpapers.isCached(ctx, p.id);
-            r.sub = cached ? "Photo: " + p.credit + " · Wikimedia Commons"
+            r.sub = cached ? (p.pack ? "Anime pack · " + p.id.substring(0, p.id.indexOf('_')) + " weather"
+                    : "Photo: " + p.credit + " · Wikimedia Commons")
                     : failed.contains(p.id) ? "Couldn't download. Check the internet connection" : "Downloading…";
             r.thumbSlot = true;
             r.thumb = thumbs.get(p.id);

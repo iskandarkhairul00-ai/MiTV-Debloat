@@ -1428,6 +1428,7 @@ public class MainActivity extends Activity {
                 break;
             case LauncherSettings.WALLPAPER:
             case LauncherSettings.RAIN_FX:
+            case LauncherSettings.RAIN_TEST:
                 loadWallpaper();
                 break;
             case LauncherSettings.USAGE_EXCLUDED:
@@ -1564,6 +1565,7 @@ public class MainActivity extends Activity {
         date.setText(DateFormat.format("EEEE, d MMMM yyyy", c));
         prayer.refresh();
         weather.refresh();
+        rainFx.setMode(rainModeFor()); // the weather card's data can change any minute
         // Rotate / Weather wallpaper: the minute tick picks up the next picture when its 5 minutes start.
         String wp = LauncherSettings.wallpaper(this);
         if (Wallpapers.ROTATE.equals(wp) || Wallpapers.WEATHER.equals(wp)) loadWallpaper();
@@ -1608,19 +1610,27 @@ public class MainActivity extends Activity {
      * picture pushed over ADB, or none. A built-in that isn't cached yet is fetched in the
      * background and shown when it lands; until then home stays black.
      */
-    /** Rain effect: on while the picture shown is named rain* or storm* (storm adds lightning). */
-    private int rainModeFor(File shown) {
-        if (shown == null || !LauncherSettings.flag(this, LauncherSettings.RAIN_FX)) return RainView.OFF;
-        String n = shown.getName().toLowerCase(java.util.Locale.ROOT);
-        if (n.startsWith("storm")) return RainView.STORM;
-        if (n.startsWith("rain")) return RainView.RAIN;
+    /**
+     * Rain effect follows the real weather (the weather card's data), whatever the wallpaper is:
+     * rain falls over the home screen while it rains, rain plus lightning in a thunderstorm,
+     * nothing when it is clear or cloudy. Settings → Rain effect → Test can force Rain or Storm.
+     */
+    private int rainModeFor() {
+        if (!LauncherSettings.flag(this, LauncherSettings.RAIN_FX)) return RainView.OFF;
+        int test = LauncherSettings.choice(this, LauncherSettings.RAIN_TEST);
+        if (test == 1) return RainView.RAIN;
+        if (test == 2) return RainView.STORM;
+        String cat = WeatherPanel.category(this);
+        if (cat == null) return RainView.OFF;
+        if (cat.startsWith("storm")) return RainView.STORM;
+        if (cat.startsWith("rain")) return RainView.RAIN;
         return RainView.OFF;
     }
 
     private void loadWallpaper() {
         String choice = wallpaperPreview != null ? wallpaperPreview : LauncherSettings.wallpaper(this);
         File found = Wallpapers.file(this, choice);
-        rainFx.setMode(rainModeFor(found));
+        rainFx.setMode(rainModeFor());
         // Bing "photo of the day": refresh at most once a day (and no more than once a minute
         // when it keeps failing, e.g. offline); a new day's picture then swaps in via the stamp.
         if (Wallpapers.BING.equals(choice) && Bing.due(this) && !wallpaperFetching

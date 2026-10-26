@@ -16,7 +16,9 @@ import java.util.Locale;
 /**
  * Built-in wallpapers: seven photos from Wikimedia Commons' Featured pictures, downloaded once
  * (1920 px, 0.5–1 MB each) and cached in the app's files dir; nothing is bundled in the APK.
- * Credits are shown in Settings and the README (CC BY-SA needs them). Your own pictures go in
+ * Eight more (the anime pack) come from this repo's docs folder the same way, and join the
+ * Rotate and Weather modes once downloaded: open the Wallpaper list once to fetch them. Credits
+ * are shown in Settings and the README (CC BY-SA needs them). Your own pictures go in
  * the Wallpapers folder on internal storage (the phone remote's Files tab has a shortcut to it);
  * each one is listed by file name. An older picture pushed over ADB as
  * files/wallpaper.{jpg,png,webp} is still offered as "Your picture".
@@ -28,15 +30,31 @@ final class Wallpapers {
             DEFAULT = "perseids"; // Stargazer, the first in the list
     private static final String UA = "TvHome/1.0 (Android TV home launcher)";
     private static final String COMMONS = "https://thumb.wikimedia.org/wikipedia/commons/thumb/";
+    /** The anime pack: JPGs (1920x1080) in the docs folder of this repo, downloaded once like the rest. */
+    private static final String RAW = "https://raw.githubusercontent.com/iskandarkhairul00-ai/MiTV-Debloat/master/docs/";
 
     static final class Photo {
         final String id, name, credit, url;
+        final boolean pack; // from this repo's docs folder, not Wikimedia
 
         Photo(String id, String name, String credit, String path) {
+            this(id, name, credit, COMMONS + path, false);
+        }
+
+        private Photo(String id, String name, String credit, String url, boolean pack) {
             this.id = id;
             this.name = name;
             this.credit = credit;
-            this.url = COMMONS + path;
+            this.url = url;
+            this.pack = pack;
+        }
+
+        /**
+         * A picture of the anime pack. The id starts with its weather (clear, cloud, rain, storm):
+         * the Weather mode picks by it, and the rain effect goes by the same name.
+         */
+        static Photo pack(String id, String name, String file) {
+            return new Photo(id, name, "My pack", RAW + file, true);
         }
     }
 
@@ -58,6 +76,15 @@ final class Wallpapers {
                             + "1920px-D%C3%BClmen%2C_Rorup%2C_NSG_Roruper_Holz_--_2021_--_8187-91.jpg"),
             new Photo("nightclouds", "Night clouds", "Martin Koitmäe · CC BY-SA 4.0",
                     "3/3f/Helkivad_%C3%B6%C3%B6pilved_Kuresoo_kohal.jpg/1920px-Helkivad_%C3%B6%C3%B6pilved_Kuresoo_kohal.jpg"),
+            // Anime pack: the prefix of the id is the weather it is shown in.
+            Photo.pack("clear_luffy", "Luffy", "luffy_putih.jpg"),
+            Photo.pack("clear_colosseum", "Colosseum sunset", "colosseum_oren.jpg"),
+            Photo.pack("cloud_sasuke", "Sasuke in purple field", "sasuke_ungu.jpg"),
+            Photo.pack("cloud_king", "King", "king_merah.jpg"),
+            Photo.pack("rain_belati", "Purple dagger", "belati_ungu.jpg"),
+            Photo.pack("rain_sukuna", "Sukuna", "sukuna.jpg"),
+            Photo.pack("storm_asta", "Asta", "asta.jpg"),
+            Photo.pack("storm_hijau", "Green neon", "hijau_neon.jpg"),
     };
 
     /** How often the "Rotate" and "Weather" modes move to the next picture. */
@@ -73,6 +100,8 @@ final class Wallpapers {
      */
     static File rotating(Context ctx, String choice) {
         List<File> pics = userPictures();
+        pics.addAll(packPictures(ctx));
+        pics.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
         if (WEATHER.equals(choice)) {
             String cat = WeatherPanel.category(ctx);
             if (cat != null) {
@@ -116,6 +145,13 @@ final class Wallpapers {
     /** Internal storage/Wallpapers: your own pictures. */
     static File folder() {
         return new File(Environment.getExternalStorageDirectory(), "Wallpapers");
+    }
+
+    /** The pack pictures downloaded so far (they join Rotate and Weather). */
+    static List<File> packPictures(Context ctx) {
+        List<File> out = new ArrayList<>();
+        for (Photo p : BUILT_IN) if (p.pack && isCached(ctx, p.id)) out.add(cached(ctx, p.id));
+        return out;
     }
 
     /** Pictures in the Wallpapers folder, A–Z. Creates the folder so it shows up in Files. */

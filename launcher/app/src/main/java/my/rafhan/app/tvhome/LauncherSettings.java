@@ -28,7 +28,7 @@ final class LauncherSettings {
             PRAYER_REMINDER = "prayer_reminder",
             STATUS_BAR = "status_bar", STATUS_LEFT = "status_left", STATUS_CENTER = "status_center",
             STATUS_RIGHT = "status_right", STATUS_POS = "status_position", STATUS_SIZE = "status_size",
-            STATUS_BG = "status_background", RAIN_FX = "rain_effect";
+            STATUS_BG = "status_background", RAIN_FX = "rain_effect", RAIN_TEST = "rain_test";
 
     /** What a status-bar slot shows. */
     static final int SLOT_NONE = 0, SLOT_SPEED = 1, SLOT_UPTIME = 2, SLOT_CLOCK = 3, SLOT_ELAPSED = 4;
