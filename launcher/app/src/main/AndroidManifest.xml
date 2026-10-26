@@ -136,5 +136,9 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/remote_accessibility" />
         </service>
+        <activity
+    android:name=".ScreensaverActivity"
+    android:exported="false"
+    android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
     </application>
 </manifest>
