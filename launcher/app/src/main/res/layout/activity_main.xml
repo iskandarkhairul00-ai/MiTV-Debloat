@@ -156,7 +156,7 @@
             </FrameLayout>
 
             <ImageView android:id="@+id/pillInputs" style="@style/IconPill"
-                android:contentDescription="@string/inputs" android:src="@drawable/ic_input" />
+                android:contentDescription="@string/inputs" android:src="@drawable/ic_screensaver" />
             <ImageView android:id="@+id/pillWifi" style="@style/IconPill"
                 android:contentDescription="@string/wifi" android:src="@drawable/ic_wifi" />
             <ImageView android:id="@+id/pillSettings" style="@style/IconPill"
