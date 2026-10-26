@@ -45,7 +45,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import android.os.SystemClock;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -101,7 +101,13 @@ public class MainActivity extends Activity {
     private final Map<String, AppEntry> rendered = new HashMap<>();
     private final List<ImageView> dockTiles = new ArrayList<>();
     private final int[] loc = new int[2];
-
+    private long lastBackUp = 0;
+    private void openScreensaver() {
+    Intent i = new Intent(this, ScreensaverActivity.class);
+    i.putExtra(ScreensaverActivity.EXTRA_HIJRI, hijri.getText().toString());
+    // TODO Now Playing: EXTRA_TITLE, EXTRA_ARTIST, EXTRA_LIVE (lihat bawah)
+    startActivity(i);
+    }
     private float dp;
     private int screenW, screenH;
     private SharedPreferences prefs;
