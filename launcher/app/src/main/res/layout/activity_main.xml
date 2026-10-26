@@ -15,6 +15,13 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
+    <!-- Falling rain over the wallpaper, under the cards. Driven by MainActivity.loadWallpaper(). -->
+    <my.rafhan.app.tvhome.RainView
+        android:id="@+id/rainView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no" />
+
     <!-- Two screens tall: home (clock, dock) on top, the app grid underneath. Slides up on Down.
          Keeps clipChildren on: that is what clips grid rows scrolled above the grid's top edge. -->
     <FrameLayout
