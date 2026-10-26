@@ -105,7 +105,10 @@ public class MainActivity extends Activity {
     private void openScreensaver() {
     Intent i = new Intent(this, ScreensaverActivity.class);
     i.putExtra(ScreensaverActivity.EXTRA_HIJRI, hijri.getText().toString());
-    // TODO Now Playing: EXTRA_TITLE, EXTRA_ARTIST, EXTRA_LIVE (lihat bawah)
+    i.putExtra(ScreensaverActivity.EXTRA_TITLE, nowPlaying.screensaverTitle());
+    i.putExtra(ScreensaverActivity.EXTRA_ARTIST, nowPlaying.screensaverArtist());
+    i.putExtra(ScreensaverActivity.EXTRA_LIVE, nowPlaying.screensaverLive());
+    ScreensaverActivity.cover = nowPlaying.screensaverCover();
     startActivity(i);
     }
     private float dp;
