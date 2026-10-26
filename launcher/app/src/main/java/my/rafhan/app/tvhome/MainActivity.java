@@ -105,6 +105,7 @@ public class MainActivity extends Activity {
 
     private FrameLayout page;
     private ImageView wallpaper;
+    private RainView rainFx;
     private GlassHighlightView highlight;
     private TextView clock, date, hijri, hero;
     private View glow;
@@ -255,6 +256,7 @@ public class MainActivity extends Activity {
 
         page = findViewById(R.id.page);
         wallpaper = findViewById(R.id.wallpaper);
+        rainFx = findViewById(R.id.rainView);
         highlight = findViewById(R.id.highlight);
         hijri = findViewById(R.id.hijri);
         clock = findViewById(R.id.clock);
@@ -1425,6 +1427,7 @@ public class MainActivity extends Activity {
                 applyWallpaperDim();
                 break;
             case LauncherSettings.WALLPAPER:
+            case LauncherSettings.RAIN_FX:
                 loadWallpaper();
                 break;
             case LauncherSettings.USAGE_EXCLUDED:
@@ -1605,9 +1608,19 @@ public class MainActivity extends Activity {
      * picture pushed over ADB, or none. A built-in that isn't cached yet is fetched in the
      * background and shown when it lands; until then home stays black.
      */
+    /** Rain effect: on while the picture shown is named rain* or storm* (storm adds lightning). */
+    private int rainModeFor(File shown) {
+        if (shown == null || !LauncherSettings.flag(this, LauncherSettings.RAIN_FX)) return RainView.OFF;
+        String n = shown.getName().toLowerCase(java.util.Locale.ROOT);
+        if (n.startsWith("storm")) return RainView.STORM;
+        if (n.startsWith("rain")) return RainView.RAIN;
+        return RainView.OFF;
+    }
+
     private void loadWallpaper() {
         String choice = wallpaperPreview != null ? wallpaperPreview : LauncherSettings.wallpaper(this);
         File found = Wallpapers.file(this, choice);
+        rainFx.setMode(rainModeFor(found));
         // Bing "photo of the day": refresh at most once a day (and no more than once a minute
         // when it keeps failing, e.g. offline); a new day's picture then swaps in via the stamp.
         if (Wallpapers.BING.equals(choice) && Bing.due(this) && !wallpaperFetching

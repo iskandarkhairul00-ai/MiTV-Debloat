@@ -391,6 +391,7 @@ final class SettingsScreen {
         out.add(toggle(LauncherSettings.SHOW_NOW, "Now Playing card", "Cover, title and controls while something plays"));
         out.add(choice(LauncherSettings.WALL_DIM, "Wallpaper dim", "How dark the wallpaper is behind the cards",
                 new int[] {0, 1, 2, 3}, new String[] {"Off", "Low", "Medium", "High"}));
+        out.add(toggle(LauncherSettings.RAIN_FX, "Rain effect", "Falling rain over wallpapers named rain* or storm*"));
         Row w = new Row(PICKER, "Wallpaper");
         w.sub = "Bing photo of the day, built-in photos or your own";
         String name = wallpaperName(LauncherSettings.wallpaper(ctx));
