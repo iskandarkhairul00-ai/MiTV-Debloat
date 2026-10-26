@@ -1,5 +1,6 @@
 # Mi TV debloat + Apple TV style launcher
 
+
 A fast, minimal home screen for **Android TV and Google TV** (Android 10 or newer), with prayer times, a live system card, Now Playing, a running-apps screen and a phone remote. It was built on a Xiaomi Mi TV, which was also [debloated](docs/xiaomi-debloat.md).
 
 **Install it on your TV:** [Windows](docs/install-windows.md) · [macOS](docs/install-macos.md) · [Linux](docs/install-linux.md) · [with an AI agent](docs/install-with-ai-agent.md)
