@@ -23,6 +23,8 @@ import java.util.Locale;
  */
 final class Wallpapers {
     static final String NONE = "none", CUSTOM = "custom", FILE = "file:", BING = "bing",
+            ROTATE = "rotate", WEATHER = "weather", // every 5 min: all pictures / by weather
+
             DEFAULT = "perseids"; // Stargazer, the first in the list
     private static final String UA = "TvHome/1.0 (Android TV home launcher)";
     private static final String COMMONS = "https://thumb.wikimedia.org/wikipedia/commons/thumb/";
@@ -58,7 +60,33 @@ final class Wallpapers {
                     "3/3f/Helkivad_%C3%B6%C3%B6pilved_Kuresoo_kohal.jpg/1920px-Helkivad_%C3%B6%C3%B6pilved_Kuresoo_kohal.jpg"),
     };
 
+    /** How often the "Rotate" and "Weather" modes move to the next picture. */
+    static final long ROTATE_MS = 5 * 60_000L;
+
     private Wallpapers() {}
+
+    /**
+     * "Rotate": the pictures in the Wallpapers folder, one after another, a new one every 5
+     * minutes (on the clock: :00, :05, :10 ...). "Weather": the same, but only pictures whose
+     * file name starts with the current weather (clear, cloud, rain, storm; e.g. rain1.jpg,
+     * rain2.jpg); with none of those, any picture. With an empty folder, the default photo.
+     */
+    static File rotating(Context ctx, String choice) {
+        List<File> pics = userPictures();
+        if (WEATHER.equals(choice)) {
+            String cat = WeatherPanel.category(ctx);
+            if (cat != null) {
+                List<File> match = new ArrayList<>();
+                for (File f : pics) if (f.getName().toLowerCase(Locale.ROOT).startsWith(cat)) match.add(f);
+                if (!match.isEmpty()) pics = match;
+            }
+        }
+        if (pics.isEmpty()) {
+            File d = cached(ctx, DEFAULT);
+            return d.isFile() ? d : null;
+        }
+        return pics.get((int) ((System.currentTimeMillis() / ROTATE_MS) % pics.size()));
+    }
 
     static Photo photo(String id) {
         for (Photo p : BUILT_IN) if (p.id.equals(id)) return p;
@@ -111,6 +139,7 @@ final class Wallpapers {
     static File file(Context ctx, String choice) {
         if (CUSTOM.equals(choice)) return custom(ctx);
         if (BING.equals(choice)) return Bing.shown(ctx);
+        if (ROTATE.equals(choice) || WEATHER.equals(choice)) return rotating(ctx, choice);
         if (choice.startsWith(FILE)) {
             String name = choice.substring(FILE.length());
             File f = new File(folder(), name);

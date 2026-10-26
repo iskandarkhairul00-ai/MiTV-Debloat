@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vertical positions are set in MainActivity.layoutPage() from the real screen height.
+     Nothing here is focusable: MainActivity drives focus itself so D-pad moves are deterministic. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <ImageView
+        android:id="@+id/wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- Two screens tall: home (clock, dock) on top, the app grid underneath. Slides up on Down.
+         Keeps clipChildren on: that is what clips grid rows scrolled above the grid's top edge. -->
+    <FrameLayout
+        android:id="@+id/page"
+        android:layout_width="match_parent"
+        android:layout_height="1040dp">
+
+        <!-- Square radial gradient squashed into an ellipse, so its edges fade out cleanly. -->
+        <View
+            android:id="@+id/glow"
+            android:layout_width="820dp"
+            android:layout_height="820dp"
+            android:layout_gravity="top|center_horizontal"
+            android:scaleY="0.4" />
+
+        <!-- Top band: big clock, then the Gregorian and Hijri dates stacked to its right. -->
+        <LinearLayout
+            android:id="@+id/clockBlock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="64dp"
+            android:layout_marginTop="28dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.02"
+                android:textColor="#FFFFFF"
+                android:textSize="56sp" />
+
+            <!-- Centred on the clock digits in MainActivity.centreDatesOnClock(). -->
+            <LinearLayout
+                android:id="@+id/dateCol"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/date"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#D9FFFFFF"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/hijri"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="1dp"
+                    android:textColor="#8CFFFFFF"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Left cards: prayer times (top level with the system card), then most used apps. -->
+        <LinearLayout
+            android:layout_width="390dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="64dp"
+            android:layout_marginTop="104dp"
+            android:orientation="vertical">
+
+            <!-- Filled by PrayerPanel. -->
+            <LinearLayout
+                android:id="@+id/prayerPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/sys_bg"
+                android:orientation="vertical"
+                android:paddingStart="14dp"
+                android:paddingTop="11dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="12dp" />
+
+            <!-- Filled by WeatherPanel. -->
+            <LinearLayout
+                android:id="@+id/weatherPanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/sys_bg"
+                android:orientation="vertical"
+                android:paddingStart="14dp"
+                android:paddingTop="11dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="12dp" />
+
+            <!-- Filled by UsagePanel. -->
+            <LinearLayout
+                android:id="@+id/usagePanel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/sys_bg"
+                android:orientation="vertical"
+                android:paddingStart="14dp"
+                android:paddingTop="11dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/pills"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="58dp"
+            android:layout_marginTop="38dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:padding="6dp">
+
+            <!-- Bell (notifications) with an unread badge, then Inputs, Wi-Fi, Settings: icon only. -->
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <ImageView android:id="@+id/pillBell" style="@style/IconPill"
+                    android:layout_marginStart="0dp" android:contentDescription="Notifications"
+                    android:src="@drawable/ic_bell" />
+
+            </FrameLayout>
+
+            <ImageView android:id="@+id/pillInputs" style="@style/IconPill"
+                android:contentDescription="@string/inputs" android:src="@drawable/ic_input" />
+            <ImageView android:id="@+id/pillWifi" style="@style/IconPill"
+                android:contentDescription="@string/wifi" android:src="@drawable/ic_wifi" />
+            <ImageView android:id="@+id/pillSettings" style="@style/IconPill"
+                android:contentDescription="@string/settings" android:src="@drawable/ic_settings" />
+        </LinearLayout>
+
+        <!-- System stats card, filled by SystemPanel. -->
+        <LinearLayout
+            android:id="@+id/sysPanel"
+            android:layout_width="410dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="64dp"
+            android:layout_marginTop="104dp"
+            android:background="@drawable/sys_bg"
+            android:orientation="vertical"
+            android:paddingStart="14dp"
+            android:paddingTop="11dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="12dp" />
+
+        <!-- Now Playing card, filled by NowPlayingPanel. Width, end margin and top follow the
+             system card (MainActivity.alignSystemPanel). Hidden while nothing plays. -->
+        <LinearLayout
+            android:id="@+id/nowPlaying"
+            android:layout_width="410dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="64dp"
+            android:layout_marginTop="240dp"
+            android:background="@drawable/sys_bg"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/hero"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_gravity="top"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:singleLine="true"
+            android:textColor="#F2FFFFFF"
+            android:textSize="34sp" />
+
+        <FrameLayout
+            android:id="@+id/dockBand"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:background="@drawable/dock_band"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingStart="10dp"
+            android:paddingTop="15dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="15dp">
+
+            <LinearLayout
+                android:id="@+id/dockRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:orientation="horizontal" />
+        </FrameLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/grid"
+            android:layout_width="match_parent"
+            android:layout_height="500dp"
+            android:layout_gravity="top"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:focusable="false"
+            android:overScrollMode="never"
+            android:scrollbars="none" />
+    </FrameLayout>
+
+    <!-- Fades the next-row peek into shadow; sized in MainActivity.layoutPage(). -->
+    <View
+        android:id="@+id/peekFade"
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/peek_fade"
+        android:importantForAccessibility="no" />
+
+    <!-- App list: shades the previous row as it scrolls under the top of the screen. -->
+    <View
+        android:id="@+id/gridTopFade"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_gravity="top"
+        android:alpha="0"
+        android:background="@drawable/grid_top_fade"
+        android:importantForAccessibility="no" />
+
+    <!-- Screen above home (Up from the top bar): running apps etc. Slid in by MainActivity;
+         below the menu so the hold-OK options open over it. -->
+    <FrameLayout
+        android:id="@+id/upPage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- The launcher's Settings (gear pill), filled by SettingsScreen; fades in over home. -->
+    <FrameLayout
+        android:id="@+id/settingsPage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/menu"
+        android:layout_width="240dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:background="@drawable/menu_bg"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone" />
+
+    <my.rafhan.app.tvhome.GlassHighlightView
+        android:id="@+id/highlight"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Bell unread badge: above the focus highlight so the glass ring never covers it; placed
+         on the bell's corner by MainActivity.placeBellBadge(). -->
+    <TextView
+        android:id="@+id/bellBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="20dp"
+        android:layout_gravity="top|start"
+        android:background="@drawable/badge_bg"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:minWidth="20dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:textColor="#FF000000"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</FrameLayout>

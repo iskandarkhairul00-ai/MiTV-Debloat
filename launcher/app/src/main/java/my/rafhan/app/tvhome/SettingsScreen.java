@@ -403,6 +403,8 @@ final class SettingsScreen {
     static String wallpaperName(String choice) {
         if (Wallpapers.CUSTOM.equals(choice)) return "Your picture";
         if (Wallpapers.BING.equals(choice)) return "Bing daily";
+        if (Wallpapers.ROTATE.equals(choice)) return "Rotate every 5 min";
+        if (Wallpapers.WEATHER.equals(choice)) return "Weather + rotate";
         if (choice.startsWith(Wallpapers.FILE)) return baseName(choice.substring(Wallpapers.FILE.length()));
         Wallpapers.Photo p = Wallpapers.photo(choice);
         return p != null ? p.name : "None";
@@ -552,6 +554,18 @@ final class SettingsScreen {
         bing.id = Wallpapers.BING;
         bing.action = () -> pickWallpaper(Wallpapers.BING);
         items.add(bing);
+        Row rot = new Row(CHECK, "Rotate every 5 minutes");
+        rot.sub = "Cycles through the pictures in the Wallpapers folder";
+        rot.checked = Wallpapers.ROTATE.equals(current);
+        rot.id = Wallpapers.ROTATE;
+        rot.action = () -> pickWallpaper(Wallpapers.ROTATE);
+        items.add(rot);
+        Row wx = new Row(CHECK, "Weather + rotate every 5 minutes");
+        wx.sub = "Pictures named clear*, cloud*, rain*, storm* follow the weather";
+        wx.checked = Wallpapers.WEATHER.equals(current);
+        wx.id = Wallpapers.WEATHER;
+        wx.action = () -> pickWallpaper(Wallpapers.WEATHER);
+        items.add(wx);
         for (Wallpapers.Photo p : Wallpapers.BUILT_IN) {
             Row r = new Row(CHECK, p.name);
             boolean cached = Wallpapers.isCached(ctx, p.id);

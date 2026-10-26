@@ -116,6 +116,7 @@ public class MainActivity extends Activity {
     private FrameLayout settingsPage;
     private FrameLayout upPage;
     private PrayerPanel prayer;
+    private WeatherPanel weather;
     private UsagePanel usage;
     private Map<String, Long> usageScores = new HashMap<>();
     private final GradientDrawable glowDrawable = new GradientDrawable();
@@ -284,6 +285,7 @@ public class MainActivity extends Activity {
             else upIdx = clamp(upIdx, up.count());
             up.setFocused(upIdx);
         });
+        weather = new WeatherPanel(this, findViewById(R.id.weatherPanel), worker);
         usage = new UsagePanel(this, findViewById(R.id.usagePanel));
         alignSystemPanel();
         centreDatesOnClock();
@@ -1446,6 +1448,11 @@ public class MainActivity extends Activity {
         ViewGroup.MarginLayoutParams ulp = (ViewGroup.MarginLayoutParams) usageCard.getLayoutParams();
         ulp.topMargin = showPrayer ? px(10) : 0;
         usageCard.setLayoutParams(ulp);
+        // The weather card sits under the prayer card; at the top when that one is off.
+        View weatherCard = findViewById(R.id.weatherPanel);
+        ViewGroup.MarginLayoutParams wlp = (ViewGroup.MarginLayoutParams) weatherCard.getLayoutParams();
+        wlp.topMargin = showPrayer ? px(10) : 0;
+        weatherCard.setLayoutParams(wlp);
         findViewById(R.id.sysPanel).setVisibility(showSystem() ? View.VISIBLE : View.GONE);
         setSystemVisible(!onGridPage(section) && !onUpPage(section) && section != SETTINGS);
         if (!LauncherSettings.flag(this, LauncherSettings.SHOW_NOW)) nowPlaying.disable();
@@ -1553,6 +1560,10 @@ public class MainActivity extends Activity {
         clock.setText(DateFormat.format(LauncherSettings.use24h(this) ? "HH:mm" : "h:mm", c));
         date.setText(DateFormat.format("EEEE, d MMMM yyyy", c));
         prayer.refresh();
+        weather.refresh();
+        // Rotate / Weather wallpaper: the minute tick picks up the next picture when its 5 minutes start.
+        String wp = LauncherSettings.wallpaper(this);
+        if (Wallpapers.ROTATE.equals(wp) || Wallpapers.WEATHER.equals(wp)) loadWallpaper();
         // After midnight, pick up the new Bing photo of the day even if left on the home screen.
         java.time.LocalDate day = java.time.LocalDate.now();
         if (!day.equals(lastWallpaperDay)) {
@@ -1579,6 +1590,7 @@ public class MainActivity extends Activity {
         pills[PILL_WIFI].setContentDescription(st.pillLabel());
         system.refreshNetwork();
         prayer.onNetworkAvailable();
+        weather.onNetworkAvailable();
         loadWallpaper(); // a built-in that couldn't download yet gets another try
     }
 
