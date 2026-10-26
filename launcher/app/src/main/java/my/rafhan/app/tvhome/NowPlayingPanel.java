@@ -231,6 +231,26 @@ final class NowPlayingPanel {
         return shown;
     }
 
+        /** Untuk screensaver. */
+    String screensaverTitle() {
+        return shown ? title.getText().toString() : null;
+    }
+
+    String screensaverArtist() {
+        return shown && artist.getVisibility() == View.VISIBLE ? artist.getText().toString() : "";
+    }
+
+    boolean screensaverLive() {
+        Info i = info;
+        return shown && i != null && i.duration <= 0 && helper != null;
+    }
+
+    Drawable screensaverCover() {
+        Drawable d = cover.getDrawable();
+        if (d == null) return null;
+        Drawable.ConstantState cs = d.getConstantState();
+        return cs != null ? cs.newDrawable().mutate() : d;
+    }
     View button(int i) {
         return buttons[i];
     }
