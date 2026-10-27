@@ -652,10 +652,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Most used first (last 7 days); apps with no recorded use stay A-Z. List.sort is stable. */
+    /**
+     * Tempat app dalam grid kekal: tak ikut app yang baru dipakai, dan app baru diletak di hujung
+     * (lihat AppOrder). Kad Most used masih baca skor penggunaan.
+     */
     private void sortByUsage(List<AppEntry> list) {
-        // Positions are fixed: the app grid under the dock no longer re-orders itself by use.
-        // (The Most used card still reads the usage scores.)
+        AppOrder.apply(this, list);
     }
 
     /** On every return home: re-rank the grid and refresh the card, keeping focus on the same app. */
