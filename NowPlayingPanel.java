@@ -494,4 +494,220 @@ final class NowPlayingPanel {
                 : state == PlaybackState.STATE_PAUSED ? 1 : 0;
     }
 
-    //
+    // ---------------------------------------------------------------- display
+
+    /** Ikon main bila dijeda. Tukar kepada R.drawable.ic_play kalau projek ada ikon sendiri. */
+    private static final int PLAY_ICON = android.R.drawable.ic_media_play;
+    private static final long ACTION_PREV = PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+    private static final long ACTION_NEXT = PlaybackState.ACTION_SKIP_TO_NEXT;
+
+    private int shownIcon = -1;
+    private String labelPkg, labelText;
+
+    private void show(Info i) {
+        info = i;
+        last = i;
+        main.removeCallbacks(tick);
+        if (i == null) {
+            coverKey = null;
+            helperArt = null;
+            lyric.setVisibility(View.GONE);
+            if (shown) {
+                shown = false;
+                card.setVisibility(View.GONE);
+                listener.onShownChanged(false);
+            }
+            return;
+        }
+        String label = appLabel(i.pkg);
+        boolean playing = i.state == PlaybackState.STATE_PLAYING;
+        boolean live = i.duration <= 0 && helper != null;
+
+        title.setText(!TextUtils.isEmpty(i.title) ? i.title : label);
+        if (TextUtils.isEmpty(i.artist)) {
+            artist.setVisibility(View.GONE);
+        } else {
+            artist.setText(i.artist);
+            artist.setVisibility(View.VISIBLE);
+        }
+        setSource(label, live);
+        setCover(i);
+
+        int icon = playing ? R.drawable.ic_pause : PLAY_ICON;
+        if (icon != shownIcon) {
+            shownIcon = icon;
+            buttons[PLAY_PAUSE].setImageResource(icon);
+        }
+        // Bila app laporkan senarai tindakan, malapkan Sebelumnya/Seterusnya yang tak disokong.
+        buttons[PREV].setAlpha(supported(i.actions, ACTION_PREV) ? 1f : 0.35f);
+        buttons[NEXT].setAlpha(supported(i.actions, ACTION_NEXT) ? 1f : 0.35f);
+
+        if (!shown) {
+            shown = true;
+            card.setVisibility(View.VISIBLE);
+            listener.onShownChanged(true);
+        }
+        updateProgress();
+        if (needsTick()) main.postDelayed(tick, 1000);
+    }
+
+    private static boolean supported(long actions, long flag) {
+        return actions == 0 || (actions & flag) != 0;
+    }
+
+    private void setSource(String label, boolean live) {
+        String s = label.toUpperCase(Locale.getDefault());
+        if (live) {
+            String full = s + "  \u25CF LIVE";
+            SpannableString sp = new SpannableString(full);
+            sp.setSpan(new ForegroundColorSpan(LIVE), s.length() + 2, full.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            source.setText(sp);
+        } else {
+            source.setText(s);
+        }
+    }
+
+    /** Cover dari helper kalau ada; kalau tidak, ikon app. Hanya dilukis semula bila berubah. */
+    private void setCover(Info i) {
+        Bitmap art = helper != null && helperArt != null && helperArtId == i.artId ? helperArt : null;
+        String key = art != null ? "art:" + i.artId + ":" + i.pkg : "app:" + i.pkg;
+        if (key.equals(coverKey)) return;
+        coverKey = key;
+        if (art != null) {
+            cover.setPadding(0, 0, 0, 0);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setImageBitmap(art);
+        } else {
+            Drawable d = null;
+            try {
+                d = ctx.getPackageManager().getApplicationIcon(i.pkg);
+            } catch (Exception ignored) {
+            }
+            int p = px(16);
+            cover.setPadding(p, p, p, p);
+            cover.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            cover.setImageDrawable(d);
+        }
+    }
+
+    private String appLabel(String pkg) {
+        if (pkg == null) return "";
+        if (pkg.equals(labelPkg) && labelText != null) return labelText;
+        String l = pkg;
+        try {
+            PackageManager pm = ctx.getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+            CharSequence cs = pm.getApplicationLabel(ai);
+            if (cs != null && cs.length() > 0) l = cs.toString();
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+        labelPkg = pkg;
+        labelText = l;
+        return l;
+    }
+
+    /** Baris lirik semasa (dipanggil dari luar). null atau kosong = sembunyikan. */
+    void setLyric(String line) {
+        if (TextUtils.isEmpty(line)) {
+            lyric.setVisibility(View.GONE);
+        } else {
+            lyric.setText(line);
+            lyric.setVisibility(View.VISIBLE);
+        }
+    }
+
+    // ---------------------------------------------------------------- progress
+
+    private boolean needsTick() {
+        Info i = info;
+        return shown && visibleOnScreen && i != null && i.state == PlaybackState.STATE_PLAYING;
+    }
+
+    private void updateProgress() {
+        Info i = info;
+        if (i == null) return;
+        boolean playing = i.state == PlaybackState.STATE_PLAYING;
+        long pos = Math.max(0, i.pos);
+        if (playing && i.updated > 0) {
+            long extra = (long) ((SystemClock.elapsedRealtime() - i.updated) * i.speed);
+            if (extra > 0) pos += extra;
+        }
+        if (i.duration > 0) {
+            pos = Math.min(pos, i.duration);
+            bar.set(pos / (float) i.duration, TEXT);
+            time.setText(format(pos));
+            time.setTextColor(DIM);
+        } else if (helper != null) {
+            bar.set(1f, LIVE);
+            time.setText("LIVE");
+            time.setTextColor(LIVE);
+        } else {
+            bar.set(0f, TEXT);
+            time.setText(format(pos));
+            time.setTextColor(DIM);
+        }
+    }
+
+    private static String format(long ms) {
+        long s = Math.max(0, ms) / 1000;
+        return s >= 3600
+                ? String.format(Locale.US, "%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
+                : String.format(Locale.US, "%d:%02d", s / 60, s % 60);
+    }
+
+    // ---------------------------------------------------------------- view helpers
+
+    private int px(float v) {
+        return Math.round(v * dp);
+    }
+
+    private TextView text(float sp, int weight, int color) {
+        TextView t = new TextView(ctx);
+        t.setTextSize(sp);
+        t.setTypeface(Fonts.outfit(ctx, weight));
+        t.setTextColor(color);
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        return t;
+    }
+
+    private LinearLayout.LayoutParams top(float dps) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = px(dps);
+        return lp;
+    }
+
+    /** Bar kemajuan nipis: trek malap, isian di atasnya. */
+    private static final class Bar extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rect = new RectF();
+        private float fraction;
+        private int color = TEXT;
+
+        Bar(Context c) {
+            super(c);
+        }
+
+        void set(float f, int c) {
+            f = Math.max(0f, Math.min(1f, f));
+            if (f == fraction && c == color) return;
+            fraction = f;
+            color = c;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float h = getHeight(), r = h / 2f, w = getWidth();
+            rect.set(0, 0, w, h);
+            paint.setColor(0x33FFFFFF);
+            canvas.drawRoundRect(rect, r, r, paint);
+            if (fraction > 0f) {
+                rect.right = w * fraction;
+                paint.setColor(color);
+                canvas.drawRoundRect(rect, r, r, paint);
+            }
+        }
+    }
+}
