@@ -173,7 +173,21 @@ final class LyricsProvider {
     private static Lyrics load(Query q, long durationMs) throws Exception {
         long sec = Math.round(durationMs / 1000.0);
 
-        // 1. Padanan tepat
+        // Sumber tambahan (port dari bitchordtv). Kegagalan satu sumber tak hentikan yang lain.
+        Lyrics extra = null;
+        try {
+            extra = kugou(q, sec);
+        } catch (Exception ignored) {
+        }
+        if (extra == null) {
+            try {
+                extra = lyricsPlus(q, sec);
+            } catch (Exception ignored) {
+            }
+        }
+        if (extra != null) return extra;
+
+        // LRCLIB. 1. Padanan tepat
         StringBuilder u = new StringBuilder(BASE).append("get?track_name=").append(enc(q.track));
         if (!q.artist.isEmpty()) u.append("&artist_name=").append(enc(q.artist));
         if (sec > 0) u.append("&duration=").append(sec);
@@ -193,6 +207,162 @@ final class LyricsProvider {
         String free = q.artist.isEmpty() ? q.track : q.artist + " " + q.track;
         l = bestOf(http(BASE + "search?q=" + enc(free)), sec);
         return l != null ? l : NONE;
+    }
+
+    // ------------------------------------------------------------------ KuGou
+
+    private static final Pattern KUGOU_STAMPED = Pattern.compile("^\\[\\d{2}:\\d{2}\\.\\d{2,3}\\].*");
+    private static final Pattern KUGOU_CREDIT = Pattern.compile(".+\\][^\\[]+[:\uFF1A].+");
+    private static final Pattern KUGOU_STAMP_ANY = Pattern.compile("\\[\\d{2}:\\d{2}\\.\\d{2,3}\\]");
+    private static final Pattern KUGOU_INSTRUMENTAL = Pattern.compile("\u7EAF\u97F3\u4E50.*\u6B23\u8D4F");
+
+    private static String stripParenthetical(String s) {
+        String r = s.replaceAll("[(\uFF08].*?[)\uFF09]", "").trim();
+        return r.isEmpty() ? s : r;
+    }
+
+    /** Fail KuGou bermula dan berakhir dengan baris kredit ("\u4F5C\u8BCD: ...") yang bertanda masa; buang. */
+    static String stripKugouCredits(String lrc) {
+        List<String> lines = new ArrayList<>();
+        for (String l : lrc.split("\\r?\\n")) if (KUGOU_STAMPED.matcher(l).matches()) lines.add(l);
+        if (lines.isEmpty()) return "";
+        int head = 0;
+        for (int i = Math.min(30, lines.size() - 1); i >= 0; i--) {
+            if (KUGOU_CREDIT.matcher(lines.get(i)).matches()) {
+                head = i + 1;
+                break;
+            }
+        }
+        List<String> body = lines.subList(head, lines.size());
+        int tail = 0;
+        for (int i = 0; i <= Math.min(30, body.size() - 1); i++) {
+            if (KUGOU_CREDIT.matcher(body.get(body.size() - 1 - i)).matches()) {
+                tail = i + 1;
+                break;
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < body.size() - tail; i++) sb.append(body.get(i)).append('\n');
+        return sb.toString();
+    }
+
+    private static boolean isKugouInstrumental(String lrc) {
+        boolean any = false;
+        for (String l : lrc.split("\\r?\\n")) {
+            String t = KUGOU_STAMP_ANY.matcher(l).replaceAll("").trim();
+            if (t.isEmpty()) continue;
+            any = true;
+            if (!KUGOU_INSTRUMENTAL.matcher(t).find()) return false;
+        }
+        return any;
+    }
+
+    /** null = tiada; lempar kalau rangkaian gagal. */
+    private static Lyrics kugou(Query q, long sec) throws Exception {
+        String keyword = stripParenthetical(q.track)
+                + (q.artist.isEmpty() ? "" : " - " + stripParenthetical(q.artist));
+
+        // Cari lagu, ambil cincang (hash) yang tempohnya hampir sama.
+        String songsBody = http("https://mobileservice.kugou.com/api/v3/search/song?version=9108&plat=0"
+                + "&pagesize=8&showtype=0&keyword=" + enc(keyword));
+        List<String> hashes = new ArrayList<>();
+        if (songsBody != null) {
+            JSONObject data = new JSONObject(songsBody).optJSONObject("data");
+            JSONArray info = data == null ? null : data.optJSONArray("info");
+            List<JSONObject> cands = new ArrayList<>();
+            for (int i = 0; info != null && i < info.length(); i++) {
+                JSONObject o = info.optJSONObject(i);
+                if (o == null || o.optString("hash").isEmpty()) continue;
+                long d = o.has("duration") ? o.optLong("duration", -1) : -1;
+                if (sec <= 0 || Math.abs(d - sec) <= 8) cands.add(o);
+            }
+            final long target = sec;
+            Collections.sort(cands, (a, b) -> Long.compare(
+                    Math.abs(a.optLong("duration", 0) - target),
+                    Math.abs(b.optLong("duration", 0) - target)));
+            for (JSONObject o : cands) hashes.add(o.optString("hash"));
+        }
+
+        JSONObject candidate = null;
+        for (String hash : hashes) {
+            String b = http("https://lyrics.kugou.com/search?ver=1&man=yes&client=pc&hash=" + enc(hash));
+            candidate = firstCandidate(b);
+            if (candidate != null) break;
+        }
+        if (candidate == null) {
+            String b = http("https://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=" + enc(keyword)
+                    + (sec > 0 ? "&duration=" + (sec * 1000) : ""));
+            candidate = firstCandidate(b);
+        }
+        if (candidate == null) return null;
+
+        String dl = http("https://lyrics.kugou.com/download?fmt=lrc&charset=utf8&client=pc&ver=1"
+                + "&id=" + enc(candidate.optString("id")) + "&accesskey=" + enc(candidate.optString("accesskey")));
+        if (dl == null) return null;
+        String content = new JSONObject(dl).optString("content", "");
+        if (content.isEmpty()) return null;
+        String lrc = new String(android.util.Base64.decode(content, android.util.Base64.DEFAULT), "UTF-8");
+        String stripped = stripKugouCredits(lrc);
+        if (stripped.isEmpty() || isKugouInstrumental(stripped)) return null;
+        Lyrics l = parseLrc(stripped);
+        return l.isEmpty() ? null : l;
+    }
+
+    private static JSONObject firstCandidate(String body) throws Exception {
+        if (body == null) return null;
+        JSONArray arr = new JSONObject(body).optJSONArray("candidates");
+        return arr == null || arr.length() == 0 ? null : arr.optJSONObject(0);
+    }
+
+    // ------------------------------------------------------------------ LyricsPlus
+
+    private static final String[] PLUS_MIRRORS = {
+            "https://lyricsplus.prjktla.my.id", "https://lyricsplus.binimum.org"};
+
+    /** Baris sahaja (masa mula + teks); suku kata diabaikan. null = tiada. */
+    private static Lyrics lyricsPlus(Query q, long sec) throws Exception {
+        for (String host : PLUS_MIRRORS) {
+            try {
+                StringBuilder u = new StringBuilder(host).append("/v2/lyrics/get?title=").append(enc(q.track))
+                        .append("&artist=").append(enc(q.artist));
+                if (sec > 0) u.append("&duration=").append(sec);
+                String body = http(u.toString());
+                if (body == null) continue;
+                JSONArray arr = new JSONObject(body).optJSONArray("lyrics");
+                if (arr == null) continue;
+                List<long[]> idx = new ArrayList<>();
+                List<String> texts = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o == null || !o.has("time")) continue;
+                    String text = o.optString("text", "").trim();
+                    if (text.isEmpty()) {
+                        JSONArray syl = o.optJSONArray("syllabus");
+                        StringBuilder sb = new StringBuilder();
+                        for (int k = 0; syl != null && k < syl.length(); k++) {
+                            JSONObject w = syl.optJSONObject(k);
+                            if (w != null) sb.append(w.optString("text", ""));
+                        }
+                        text = sb.toString().trim();
+                    }
+                    if (text.isEmpty()) continue;
+                    texts.add(text);
+                    idx.add(new long[]{o.optLong("time"), texts.size() - 1});
+                }
+                if (idx.isEmpty()) continue;
+                Collections.sort(idx, (a, b) -> Long.compare(a[0], b[0]));
+                long[] times = new long[idx.size()];
+                String[] out = new String[idx.size()];
+                for (int i = 0; i < times.length; i++) {
+                    times[i] = idx.get(i)[0];
+                    out[i] = texts.get((int) idx.get(i)[1]);
+                }
+                return new Lyrics(times, out);
+            } catch (Exception ignored) {
+                // cuba mirror seterusnya
+            }
+        }
+        return null;
     }
 
     private static Lyrics bestOf(String body, long durationSec) throws Exception {
