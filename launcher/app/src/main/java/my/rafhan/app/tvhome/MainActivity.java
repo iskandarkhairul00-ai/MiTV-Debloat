@@ -423,7 +423,7 @@ public class MainActivity extends Activity {
         card.setBackgroundResource(R.drawable.sys_bg);
         card.setPadding(px(14), px(9), px(12), px(10));
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, gravity);
-        if ((gravity & Gravity.END) != 0) lp.setMarginEnd(margin);
+        if ((gravity & Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK) == Gravity.END) lp.setMarginEnd(margin);
         else lp.setMarginStart(margin);
         page.addView(card, lp);
         return card;
