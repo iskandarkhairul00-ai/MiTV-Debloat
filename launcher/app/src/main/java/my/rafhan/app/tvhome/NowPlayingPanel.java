@@ -59,6 +59,9 @@ final class NowPlayingPanel {
     private static final int COVER = 88;
     private static final long DUMPSYS_EVERY_MS = 4000;
 
+    /** Sesi terakhir yang dipaparkan; screensaver baca ini supaya lirik terus bersambung. */
+    static volatile Info lastInfo;
+
     interface Listener {
         /** The card appeared or disappeared. */
         void onShownChanged(boolean shown);
@@ -85,6 +88,7 @@ final class NowPlayingPanel {
     private final TextView source, title, artist, time;
     private final Bar bar;
     private final ImageView[] buttons = new ImageView[BUTTONS];
+    private final TextView lyric;
 
     private Info info;
     private boolean started, shown, visibleOnScreen = true;
@@ -93,6 +97,8 @@ final class NowPlayingPanel {
     private String coverKey;
     private Bitmap helperArt;
     private int helperArtId;
+    private String lyricsKey;
+    private LyricsProvider.Lyrics lyrics;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -171,6 +177,9 @@ final class NowPlayingPanel {
         time = text(9.5f, 500, DIM);
         progress.addView(time);
         col.addView(progress, top(6));
+        lyric = text(12f, 500, 0xE6FFFFFF);
+        lyric.setVisibility(View.GONE);
+        col.addView(lyric, top(5));
 
         int[] icons = {R.drawable.ic_pause, R.drawable.ic_stop, R.drawable.ic_open};
         for (int i = 0; i < BUTTONS; i++) {
@@ -461,6 +470,7 @@ final class NowPlayingPanel {
 
     private void show(Info i) {
         info = i;
+        lastInfo = i;
         boolean visible = i != null;
         if (visible) {
             boolean playing = i.state == PlaybackState.STATE_PLAYING;
@@ -471,7 +481,10 @@ final class NowPlayingPanel {
             setText(source, (app + " · " + stateLabel(i.state)).toUpperCase(Locale.ROOT));
             buttons[PLAY_PAUSE].setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
             showCover(i);
+            updateLyrics(i);
             updateProgress();
+        } else {
+            clearLyrics();
         }
         if (visible != shown) {
             shown = visible;
@@ -509,6 +522,49 @@ final class NowPlayingPanel {
             // Red, the broadcast "on air" colour (green already means OK/on in the System card).
             time.setTextColor(live ? LIVE : DIM);
         }
+        updateLyricLine(pos);
+    }
+
+    // ---------------------------------------------------------------- lyrics
+
+    /** Lagu berubah: reset, ambil dari cache atau minta dari LRCLIB. */
+    private void updateLyrics(Info i) {
+        LyricsProvider.Query q = LyricsProvider.query(i.title, i.artist);
+        String key = q == null ? null : q.key;
+        if (!java.util.Objects.equals(key, lyricsKey)) {
+            lyricsKey = key;
+            lyrics = null;
+            lyric.setVisibility(View.GONE);
+        }
+        if (key == null || lyrics != null) return;
+        LyricsProvider.Lyrics cached = LyricsProvider.cached(key);
+        if (cached != null) {
+            lyrics = cached;
+            return;
+        }
+        LyricsProvider.fetch(worker, i.title, i.artist, i.duration, (k, l) -> {
+            if (!k.equals(lyricsKey)) return;
+            lyrics = l;
+            if (info != null) updateProgress();
+        });
+    }
+
+    private void clearLyrics() {
+        lyricsKey = null;
+        lyrics = null;
+        lyric.setVisibility(View.GONE);
+    }
+
+    private void updateLyricLine(long pos) {
+        LyricsProvider.Lyrics l = lyrics;
+        if (l == null || l.isEmpty()) {
+            if (lyric.getVisibility() != View.GONE) lyric.setVisibility(View.GONE);
+            return;
+        }
+        int idx = l.indexAt(pos);
+        String line = idx < 0 ? "" : l.texts[idx];
+        setText(lyric, line.isEmpty() ? "\u266A" : line);
+        if (lyric.getVisibility() != View.VISIBLE) lyric.setVisibility(View.VISIBLE);
     }
 
     /** Helper's cover art, else an http(s) art URI, else the app's icon. */
