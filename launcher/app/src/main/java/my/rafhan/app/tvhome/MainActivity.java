@@ -652,10 +652,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /**
-     * Tempat app dalam grid kekal: tak ikut app yang baru dipakai, dan app baru diletak di hujung
-     * (lihat AppOrder). Kad Most used masih baca skor penggunaan.
-     */
+    /** Most used first (last 7 days); apps with no recorded use stay A-Z. List.sort is stable. */
     private void sortByUsage(List<AppEntry> list) {
         AppOrder.apply(this, list);
     }
@@ -1746,7 +1743,7 @@ public class MainActivity extends Activity {
         if (test == 2) return RainView.STORM;
         String cat = WeatherPanel.category(this);
         if (cat == null) return RainView.OFF;
-        if (cat.startsWith("storm") || WeatherPanel.heavyRain(this)) return RainView.STORM;
+        if (cat.startsWith("storm")) return RainView.STORM;
         if (cat.startsWith("rain")) return RainView.RAIN;
         return RainView.OFF;
     }

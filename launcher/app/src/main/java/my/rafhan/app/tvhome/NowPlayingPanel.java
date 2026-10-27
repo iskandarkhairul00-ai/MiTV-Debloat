@@ -479,6 +479,16 @@ final class NowPlayingPanel {
         return best;
     }
 
+    static String stateLabel(int state) {
+        switch (state) {
+            case PlaybackState.STATE_PLAYING: return "Playing";
+            case PlaybackState.STATE_PAUSED: return "Paused";
+            case PlaybackState.STATE_BUFFERING:
+            case PlaybackState.STATE_CONNECTING: return "Loading";
+            default: return "Now playing";
+        }
+    }
+
     private static String blank(String s) {
         return s == null || s.isEmpty() || s.equals("null") ? null : s;
     }

@@ -76,6 +76,11 @@ final class Bing {
         return out;
     }
 
+    /** Semua gambar yang dicache, terbaru dahulu (screensaver menukar-nukarnya); kosong kalau tiada. */
+    static List<File> pictures(Context ctx) {
+        return cached(ctx);
+    }
+
     /** The newest cached picture (Bing's current one); null when nothing is cached. */
     static File shown(Context ctx) {
         List<File> all = cached(ctx);
