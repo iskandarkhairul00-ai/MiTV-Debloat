@@ -16,7 +16,10 @@ import android.media.session.PlaybackState;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -40,7 +43,7 @@ import java.util.regex.Pattern;
 
 /**
  * "Now Playing" card: what another app is playing (cover, title, artist, app, progress) with
- * Play/Pause, Stop and Open app buttons that MainActivity's remote focus can reach.
+ * Mode, Previous, Play/Pause, Next and Open app buttons that MainActivity's remote focus can reach.
  *
  * This low-RAM TV won't let apps read other apps' media sessions (notification-listener access
  * is refused), so the data comes from outside the app:
@@ -53,7 +56,10 @@ import java.util.regex.Pattern;
  * media keys.
  */
 final class NowPlayingPanel {
-    static final int PLAY_PAUSE = 0, STOP = 1, OPEN = 2, BUTTONS = 3;
+    /** Susunan butang kiri ke kanan: mod main, sebelumnya, main/jeda, seterusnya, buka app. */
+    static final int MODE = 0, PREV = 1, PLAY_PAUSE = 2, NEXT = 3, OPEN = 4, BUTTONS = 5;
+    /** Mod main: 0 = ikut turutan (loop playlist), 1 = random, 2 = ulang lagu sama. */
+    private static final int MODE_COUNT = 3;
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, LIVE = 0xFFFF5A52;
     /** Cover is a square this size, and sets the card's height. */
     private static final int COVER = 88;
@@ -85,10 +91,11 @@ final class NowPlayingPanel {
     private final AudioManager audio;
 
     private final ImageView cover;
-    private final TextView source, title, artist, time, lyric;
+    private final TextView source, title, artist, time;
     private final Bar bar;
     private final ImageView[] buttons = new ImageView[BUTTONS];
 
+    private int mode;
     private Info info;
     private boolean started, shown, visibleOnScreen = true;
     private volatile AdbKeys.Hid helper;
@@ -175,20 +182,16 @@ final class NowPlayingPanel {
         progress.addView(time);
         col.addView(progress, top(6));
 
-        // Baris lirik semasa, di bawah bar kemajuan. Hanya untuk lagu (bukan radio).
-        lyric = text(11f, 500, 0xE6FFFFFF);
-        lyric.setVisibility(View.GONE);
-        col.addView(lyric, top(3));
-
-        int[] icons = {R.drawable.ic_pause, R.drawable.ic_stop, R.drawable.ic_open};
+        mode = ctx.getSharedPreferences("now_playing", Context.MODE_PRIVATE).getInt("mode", 0) % MODE_COUNT;
+        int[] icons = {modeIcon(), R.drawable.ic_previous, R.drawable.ic_pause, R.drawable.ic_next, R.drawable.ic_open};
         for (int i = 0; i < BUTTONS; i++) {
             ImageView b = new ImageView(ctx);
             b.setImageResource(icons[i]);
             b.setBackgroundResource(R.drawable.np_button);
             b.setScaleType(ImageView.ScaleType.CENTER);
             b.setImageTintList(ColorStateList.valueOf(TEXT));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(34), px(34));
-            if (i > 0) lp.setMarginStart(px(8));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(32), px(32));
+            if (i > 0) lp.setMarginStart(px(6));
             card.addView(b, lp);
             buttons[i] = b;
         }
@@ -273,10 +276,18 @@ final class NowPlayingPanel {
             case PLAY_PAUSE:
                 media(am, in.state == PlaybackState.STATE_PLAYING ? KeyEvent.KEYCODE_MEDIA_PAUSE : KeyEvent.KEYCODE_MEDIA_PLAY);
                 break;
-            case STOP:
-                media(am, (in.actions & PlaybackState.ACTION_STOP) != 0 || in.actions == 0
-                        ? KeyEvent.KEYCODE_MEDIA_STOP : KeyEvent.KEYCODE_MEDIA_PAUSE);
+            case PREV:
+                media(am, KeyEvent.KEYCODE_MEDIA_PREVIOUS);
                 break;
+            case NEXT:
+                media(am, KeyEvent.KEYCODE_MEDIA_NEXT);
+                break;
+            case MODE:
+                mode = (mode + 1) % MODE_COUNT;
+                ctx.getSharedPreferences("now_playing", Context.MODE_PRIVATE).edit().putInt("mode", mode).apply();
+                buttons[MODE].setImageResource(modeIcon());
+                sendMode(mode);
+                return;
             case OPEN:
                 PackageManager pm = ctx.getPackageManager();
                 Intent launch = pm.getLeanbackLaunchIntentForPackage(in.pkg);
@@ -296,6 +307,19 @@ final class NowPlayingPanel {
             main.removeCallbacks(dumpsysPoll);
             main.postDelayed(dumpsysPoll, 600);
         }
+    }
+
+    private int modeIcon() {
+        return mode == 1 ? R.drawable.ic_shuffle : mode == 2 ? R.drawable.ic_repeat_one : R.drawable.ic_repeat;
+    }
+
+    /**
+     * Hantar mod main ke app muzik. Android tiada kekunci media untuk shuffle/repeat, jadi ini
+     * perlu custom action MediaSession (sendCustomAction) melalui MediaHelper. Buat masa ini
+     * hanya ikon yang bertukar; sambungkan di sini bila nama custom action app tu diketahui.
+     */
+    private void sendMode(int mode) {
+        // TODO: hantar custom action (shuffle/repeat) ke sesi app yang sedang main.
     }
 
     private static void media(AudioManager am, int code) {
@@ -467,243 +491,207 @@ final class NowPlayingPanel {
 
     // ---------------------------------------------------------------- display
 
+    /** Ikon main bila dijeda. Tukar kepada R.drawable.ic_play kalau projek ada ikon sendiri. */
+    private static final int PLAY_ICON = android.R.drawable.ic_media_play;
+    private static final long ACTION_PREV = PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+    private static final long ACTION_NEXT = PlaybackState.ACTION_SKIP_TO_NEXT;
+
+    private int shownIcon = -1;
+    private String labelPkg, labelText;
+
     private void show(Info i) {
         info = i;
         last = i;
-        boolean visible = i != null;
-        if (visible) {
-            boolean playing = i.state == PlaybackState.STATE_PLAYING;
-            String app = appLabel(i.pkg);
-            setText(title, TextUtils.isEmpty(i.title) ? app : i.title);
-            setText(artist, i.artist == null ? "" : i.artist);
-            artist.setVisibility(TextUtils.isEmpty(i.artist) ? View.GONE : View.VISIBLE);
-            setText(source, (app + " · " + stateLabel(i.state)).toUpperCase(Locale.ROOT));
-            buttons[PLAY_PAUSE].setImageResource(playing ? R.drawable.ic_pause : R.drawable.ic_play);
-            showCover(i);
-            updateProgress();
-        }
-        if (visible != shown) {
-            shown = visible;
-            card.setVisibility(visible ? View.VISIBLE : View.GONE);
-            listener.onShownChanged(visible);
-        }
         main.removeCallbacks(tick);
+        if (i == null) {
+            coverKey = null;
+            helperArt = null;
+            if (shown) {
+                shown = false;
+                card.setVisibility(View.GONE);
+                listener.onShownChanged(false);
+            }
+            return;
+        }
+        String label = appLabel(i.pkg);
+        boolean playing = i.state == PlaybackState.STATE_PLAYING;
+        boolean live = i.duration <= 0 && helper != null;
+
+        title.setText(!TextUtils.isEmpty(i.title) ? i.title : label);
+        if (TextUtils.isEmpty(i.artist)) {
+            artist.setVisibility(View.GONE);
+        } else {
+            artist.setText(i.artist);
+            artist.setVisibility(View.VISIBLE);
+        }
+        setSource(label, live);
+        setCover(i);
+
+        int icon = playing ? R.drawable.ic_pause : PLAY_ICON;
+        if (icon != shownIcon) {
+            shownIcon = icon;
+            buttons[PLAY_PAUSE].setImageResource(icon);
+        }
+        // Bila app laporkan senarai tindakan, malapkan Sebelumnya/Seterusnya yang tak disokong.
+        buttons[PREV].setAlpha(supported(i.actions, ACTION_PREV) ? 1f : 0.35f);
+        buttons[NEXT].setAlpha(supported(i.actions, ACTION_NEXT) ? 1f : 0.35f);
+
+        if (!shown) {
+            shown = true;
+            card.setVisibility(View.VISIBLE);
+            listener.onShownChanged(true);
+        }
+        updateProgress();
         if (needsTick()) main.postDelayed(tick, 1000);
     }
 
+    private static boolean supported(long actions, long flag) {
+        return actions == 0 || (actions & flag) != 0;
+    }
+
+    private void setSource(String label, boolean live) {
+        String s = label.toUpperCase(Locale.getDefault());
+        if (live) {
+            String full = s + "  \u25CF LIVE";
+            SpannableString sp = new SpannableString(full);
+            sp.setSpan(new ForegroundColorSpan(LIVE), s.length() + 2, full.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            source.setText(sp);
+        } else {
+            source.setText(s);
+        }
+    }
+
+    /** Cover dari helper kalau ada; kalau tidak, ikon app. Hanya dilukis semula bila berubah. */
+    private void setCover(Info i) {
+        Bitmap art = helper != null && helperArt != null && helperArtId == i.artId ? helperArt : null;
+        String key = art != null ? "art:" + i.artId + ":" + i.pkg : "app:" + i.pkg;
+        if (key.equals(coverKey)) return;
+        coverKey = key;
+        if (art != null) {
+            cover.setPadding(0, 0, 0, 0);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setImageBitmap(art);
+        } else {
+            Drawable d = null;
+            try {
+                d = ctx.getPackageManager().getApplicationIcon(i.pkg);
+            } catch (Exception ignored) {
+            }
+            int p = px(16);
+            cover.setPadding(p, p, p, p);
+            cover.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            cover.setImageDrawable(d);
+        }
+    }
+
+    private String appLabel(String pkg) {
+        if (pkg == null) return "";
+        if (pkg.equals(labelPkg) && labelText != null) return labelText;
+        String l = pkg;
+        try {
+            PackageManager pm = ctx.getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+            CharSequence cs = pm.getApplicationLabel(ai);
+            if (cs != null && cs.length() > 0) l = cs.toString();
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+        labelPkg = pkg;
+        labelText = l;
+        return l;
+    }
+
+    // ---------------------------------------------------------------- progress
+
     private boolean needsTick() {
         Info i = info;
-        return started && visibleOnScreen && i != null && i.state == PlaybackState.STATE_PLAYING;
-    }
-
-    /**
-     * Lirik untuk lagu sahaja: radio live tiada tempoh (duration 0), jadi tiada lirik.
-     * Tempoh hanya diketahui bila USB debugging hidup (helper); tanpa itu, tiada lirik.
-     */
-    private void updateLyric(Info i, long pos) {
-        if (i.duration <= 0 || TextUtils.isEmpty(i.title)) {
-            hideLyric();
-            return;
-        }
-        LyricsProvider.Query q = LyricsProvider.query(i.title, i.artist);
-        if (q == null) {
-            hideLyric();
-            return;
-        }
-        LyricsProvider.Lyrics l = LyricsProvider.cached(q.key);
-        if (l == null) {
-            // Belum ada: cari (tak berulang kalau sedang dicari / baru gagal).
-            LyricsProvider.fetch(worker, i.title, i.artist, i.duration,
-                    (key, res) -> {
-                        if (info != null) updateProgress();
-                    });
-            hideLyric();
-            return;
-        }
-        if (l.isEmpty()) {
-            hideLyric();
-            return;
-        }
-        int idx = l.indexAt(pos);
-        setText(lyric, idx < 0 ? "" : l.texts[idx]);
-        lyric.setVisibility(View.VISIBLE);
-    }
-
-    private void hideLyric() {
-        if (lyric.getVisibility() != View.GONE) lyric.setVisibility(View.GONE);
+        return shown && visibleOnScreen && i != null && i.state == PlaybackState.STATE_PLAYING;
     }
 
     private void updateProgress() {
         Info i = info;
         if (i == null) return;
-        long pos = i.pos;
-        if (i.state == PlaybackState.STATE_PLAYING && i.updated > 0) {
-            pos += (long) ((SystemClock.elapsedRealtime() - i.updated) * i.speed);
+        boolean playing = i.state == PlaybackState.STATE_PLAYING;
+        long pos = Math.max(0, i.pos);
+        if (playing && i.updated > 0) {
+            long extra = (long) ((SystemClock.elapsedRealtime() - i.updated) * i.speed);
+            if (extra > 0) pos += extra;
         }
-        pos = Math.max(0, pos);
-        updateLyric(i, pos);
         if (i.duration > 0) {
-            pos = Math.min(i.duration, pos);
-            bar.setVisibility(View.VISIBLE);
-            bar.set(pos / (float) i.duration);
-            setText(time, clock(pos) + " / " + clock(i.duration));
+            pos = Math.min(pos, i.duration);
+            bar.set(pos / (float) i.duration, TEXT);
+            time.setText(format(pos));
             time.setTextColor(DIM);
+        } else if (helper != null) {
+            bar.set(1f, LIVE);
+            time.setText("LIVE");
+            time.setTextColor(LIVE);
         } else {
-            // The helper reports length 0 for live streams; dumpsys doesn't expose the length at all.
-            bar.setVisibility(View.GONE);
-            boolean live = helper != null;
-            setText(time, live ? "\u25CF LIVE" : clock(pos));
-            // Red, the broadcast "on air" colour (green already means OK/on in the System card).
-            time.setTextColor(live ? LIVE : DIM);
+            bar.set(0f, TEXT);
+            time.setText(format(pos));
+            time.setTextColor(DIM);
         }
     }
 
-    /** Helper's cover art, else an http(s) art URI, else the app's icon. */
-    private void showCover(Info i) {
-        String key;
-        if (helper != null && i.artId != 0 && i.artId == helperArtId && helperArt != null) {
-            key = i.pkg + "|art" + i.artId;
-            if (!key.equals(coverKey)) {
-                coverKey = key;
-                setCover(helperArt);
-            }
-            return;
-        }
-        key = i.pkg + "|" + i.artUri;
-        if (key.equals(coverKey)) return;
-        coverKey = key;
-        showAppIcon(i.pkg);
-        String uri = i.artUri;
-        if (uri == null || !uri.startsWith("http")) return;
-        int size = px(58) * 2;
-        worker.execute(() -> {
-            Bitmap loaded = download(uri, size);
-            if (loaded != null) main.post(() -> {
-                if (key.equals(coverKey)) setCover(loaded);
-            });
-        });
+    private static String format(long ms) {
+        long s = Math.max(0, ms) / 1000;
+        return s >= 3600
+                ? String.format(Locale.US, "%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
+                : String.format(Locale.US, "%d:%02d", s / 60, s % 60);
     }
 
-    /** No cover art: the app's icon, filling the square like a cover would. */
-    private void showAppIcon(String pkg) {
-        try {
-            Drawable icon = ctx.getPackageManager().getApplicationIcon(pkg);
-            cover.setImageDrawable(icon);
-            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        } catch (PackageManager.NameNotFoundException e) {
-            cover.setImageResource(R.drawable.ic_music);
-            cover.setScaleType(ImageView.ScaleType.CENTER);
-        }
-    }
+    // ---------------------------------------------------------------- view helpers
 
-    private void setCover(Bitmap bmp) {
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setImageBitmap(bmp);
-    }
-
-    private static Bitmap download(String uri, int size) {
-        HttpURLConnection c = null;
-        try {
-            c = (HttpURLConnection) new URL(uri).openConnection();
-            c.setConnectTimeout(8000);
-            c.setReadTimeout(8000);
-            byte[] data;
-            try (InputStream in = c.getInputStream()) {
-                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-                byte[] buf = new byte[16384];
-                for (int n; (n = in.read(buf)) > 0 && out.size() < 8 << 20; ) out.write(buf, 0, n);
-                data = out.toByteArray();
-            }
-            BitmapFactory.Options o = new BitmapFactory.Options();
-            o.inJustDecodeBounds = true;
-            BitmapFactory.decodeByteArray(data, 0, data.length, o);
-            o.inSampleSize = 1;
-            while (o.outWidth / (o.inSampleSize * 2) >= size && o.outHeight / (o.inSampleSize * 2) >= size) o.inSampleSize *= 2;
-            o.inJustDecodeBounds = false;
-            return BitmapFactory.decodeByteArray(data, 0, data.length, o);
-        } catch (Exception | OutOfMemoryError e) {
-            return null;
-        } finally {
-            if (c != null) c.disconnect();
-        }
-    }
-
-    // ---------------------------------------------------------------- helpers
-
-    private String appLabel(String pkg) {
-        try {
-            ApplicationInfo ai = ctx.getPackageManager().getApplicationInfo(pkg, 0);
-            return ctx.getPackageManager().getApplicationLabel(ai).toString();
-        } catch (PackageManager.NameNotFoundException e) {
-            return pkg;
-        }
-    }
-
-    static String stateLabel(int state) {
-        switch (state) {
-            case PlaybackState.STATE_PLAYING: return "Playing";
-            case PlaybackState.STATE_PAUSED: return "Paused";
-            case PlaybackState.STATE_BUFFERING:
-            case PlaybackState.STATE_CONNECTING: return "Loading";
-            default: return "Now playing";
-        }
-    }
-
-    private static String clock(long ms) {
-        long s = ms / 1000, h = s / 3600, m = (s / 60) % 60;
-        return h > 0 ? String.format(Locale.US, "%d:%02d:%02d", h, m, s % 60) : String.format(Locale.US, "%d:%02d", m, s % 60);
-    }
-
-    private static void setText(TextView v, String s) {
-        if (!s.contentEquals(v.getText())) v.setText(s);
+    private int px(float v) {
+        return Math.round(v * dp);
     }
 
     private TextView text(float sp, int weight, int color) {
         TextView t = new TextView(ctx);
         t.setTextSize(sp);
-        t.setTextColor(color);
         t.setTypeface(Fonts.outfit(ctx, weight));
+        t.setTextColor(color);
         t.setSingleLine(true);
         t.setEllipsize(TextUtils.TruncateAt.END);
-        t.setIncludeFontPadding(false);
         return t;
     }
 
-    private LinearLayout.LayoutParams top(int dps) {
+    private LinearLayout.LayoutParams top(float dps) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = px(dps);
         return lp;
     }
 
-    private int px(float dps) {
-        return Math.round(dps * dp);
-    }
-
+    /** Bar kemajuan nipis: trek malap, isian di atasnya. */
     private static final class Bar extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final RectF r = new RectF();
+        private final RectF rect = new RectF();
         private float fraction;
+        private int color = TEXT;
 
         Bar(Context c) {
             super(c);
         }
 
-        void set(float f) {
-            if (Math.abs(f - fraction) < 0.001f) return;
+        void set(float f, int c) {
+            f = Math.max(0f, Math.min(1f, f));
+            if (f == fraction && c == color) return;
             fraction = f;
+            color = c;
             invalidate();
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
-            float h = getHeight(), rad = h / 2f;
-            r.set(0, 0, getWidth(), h);
-            paint.setColor(0x26FFFFFF);
-            canvas.drawRoundRect(r, rad, rad, paint);
-            r.right = getWidth() * fraction;
-            paint.setColor(0xD9FFFFFF);
-            canvas.drawRoundRect(r, rad, rad, paint);
+            float h = getHeight(), r = h / 2f, w = getWidth();
+            rect.set(0, 0, w, h);
+            paint.setColor(0x33FFFFFF);
+            canvas.drawRoundRect(rect, r, r, paint);
+            if (fraction > 0f) {
+                rect.right = w * fraction;
+                paint.setColor(color);
+                canvas.drawRoundRect(rect, r, r, paint);
+            }
         }
     }
 }

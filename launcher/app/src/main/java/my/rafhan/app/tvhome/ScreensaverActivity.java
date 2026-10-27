@@ -1,6 +1,8 @@
 package my.rafhan.app.tvhome;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -21,14 +23,17 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Screensaver: jam besar di tengah, kad Now Playing di kiri bawah, lirik besar di kanan bawah.
+ * Screensaver: jam besar di tengah, kad Now Playing di kiri bawah, latar gambar harian Bing
+ * (yang sudah dimuat turun launcher) bertukar perlahan dan digelapkan.
  * Anti burn-in: elemen beralih sedikit setiap 2 minit, malap lagi selepas 10 minit.
  * Keluar: tekan mana-mana butang atau sentuh.
  */
@@ -51,15 +56,15 @@ public class ScreensaverActivity extends Activity {
     private View dimOverlay;
     private int shiftIdx = 0;
 
-    // ---- Lirik (lagu sahaja; radio live tiada tempoh jadi tiada lirik) ----
-    private TextView lyric;
-    private NowPlayingPanel.Info song;      // lagu yang sedang main bila screensaver bermula
-    private long songPos, songUpdated;
-    private float songSpeed = 1f;
-    private boolean songPlaying;
-    private boolean polling;
-    private String shownLine = "";
-    private final ExecutorService lyricWorker = Executors.newSingleThreadExecutor();
+    // ---- Latar: gambar Bing yang bertukar, dua lapisan untuk fade silang ----
+    private ImageView bgA, bgB;
+    private View scrim;
+    private boolean frontA = true;
+    private int picIdx;
+    private long lastBingTry;
+    private static final long BG_MS = 45_000, SCRIM_MS = 1200;
+    private static final float SCRIM_NORMAL = 0.62f;
+    private final ExecutorService bgWorker = Executors.newSingleThreadExecutor();
     private long created;
     private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final SimpleDateFormat dateFmt =
@@ -81,23 +86,14 @@ public class ScreensaverActivity extends Activity {
             if (card.getVisibility() == View.VISIBLE) {
                 card.animate().translationX(dx).translationY(dy).setDuration(800).start();
             }
-            lyric.animate().translationX(dx).translationY(dy).setDuration(800).start();
             h.postDelayed(this, 120_000);
         }
     };
 
-    private final Runnable lyricTick = new Runnable() {
+    private final Runnable bgTask = new Runnable() {
         @Override public void run() {
-            updateLyric();
-            h.postDelayed(this, 400);
-        }
-    };
-
-    /** Selaras semula kedudukan lagu dengan `dumpsys media_session` setiap 5 saat. */
-    private final Runnable pollTask = new Runnable() {
-        @Override public void run() {
-            pollSession();
-            h.postDelayed(this, 5000);
+            nextBackground();
+            h.postDelayed(this, BG_MS);
         }
     };
 
@@ -120,6 +116,22 @@ public class ScreensaverActivity extends Activity {
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#0B0F14"));
+
+        // ---- Latar: gambar Bing, dua lapisan untuk fade silang ----
+        bgA = new ImageView(this);
+        bgB = new ImageView(this);
+        for (ImageView v : new ImageView[] {bgA, bgB}) {
+            v.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            v.setAlpha(0f);
+            root.addView(v, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        // Gelap supaya jam jelas dan skrin tak terlalu terang pada waktu malam.
+        scrim = new View(this);
+        scrim.setBackgroundColor(Color.BLACK);
+        scrim.setAlpha(SCRIM_NORMAL);
+        root.addView(scrim, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
         // ---- Tengah: jam + tarikh (+ Hijri kalau dihantar) ----
         LinearLayout box = new LinearLayout(this);
@@ -166,28 +178,6 @@ public class ScreensaverActivity extends Activity {
         cardLp.setMargins(dp(48), 0, 0, dp(48));
         root.addView(card, cardLp);
         card.setVisibility(title == null || title.isEmpty() ? View.GONE : View.VISIBLE);
-
-        // ---- Kanan bawah: lirik besar (ruang kosong di sebelah kad) ----
-        NowPlayingPanel.Info s = NowPlayingPanel.last;
-        if (s != null && s.duration > 0 && !TextUtils.isEmpty(s.title)
-                && s.state == PlaybackState.STATE_PLAYING) {
-            song = s;
-            songPos = s.pos;
-            songUpdated = s.updated > 0 ? s.updated : SystemClock.elapsedRealtime();
-            songSpeed = s.speed;
-            songPlaying = true;
-        }
-        lyric = new TextView(this);
-        lyric.setTextColor(Color.WHITE);
-        lyric.setTextSize(32);
-        lyric.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        lyric.setGravity(Gravity.BOTTOM | Gravity.END);
-        lyric.setMaxLines(4);
-        lyric.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        FrameLayout.LayoutParams lyricLp = new FrameLayout.LayoutParams(
-                dp(420), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.END);
-        lyricLp.setMargins(0, 0, dp(48), dp(48));
-        root.addView(lyric, lyricLp);
 
         // ---- Lapisan malap (selepas 10 minit) ----
         dimOverlay = new View(this);
@@ -266,8 +256,7 @@ public class ScreensaverActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         h.post(tick);
-        h.post(lyricTick);
-        h.postDelayed(pollTask, 1500);
+        h.post(bgTask);
         h.postDelayed(shiftTask, 120_000);
         h.postDelayed(dimTask, 600_000);
     }
@@ -285,7 +274,7 @@ public class ScreensaverActivity extends Activity {
     @Override protected void onDestroy() {
         super.onDestroy();
         cover = null;
-        lyricWorker.shutdownNow();
+        bgWorker.shutdownNow();
     }
 
     // ---- Keluar: mana-mana butang / sentuhan ----
@@ -301,59 +290,49 @@ public class ScreensaverActivity extends Activity {
         return true;
     }
 
-    /** Baris lirik pada kedudukan semasa. Kosong kalau bukan lagu, berhenti, atau lagu sudah tamat. */
-    private void updateLyric() {
-        String line = "";
-        if (song != null && songPlaying) {
-            long pos = songPos + (long) ((SystemClock.elapsedRealtime() - songUpdated) * songSpeed);
-            if (pos <= song.duration + 2000) {
-                LyricsProvider.Query q = LyricsProvider.query(song.title, song.artist);
-                if (q != null) {
-                    LyricsProvider.Lyrics l = LyricsProvider.cached(q.key);
-                    if (l == null) {
-                        LyricsProvider.fetch(lyricWorker, song.title, song.artist, song.duration,
-                                (key, res) -> updateLyric());
-                    } else if (!l.isEmpty()) {
-                        int idx = l.indexAt(pos);
-                        if (idx >= 0) line = l.texts[idx];
-                    }
-                }
+    // ================================================================ Latar Bing
+
+    /** Muat gambar Bing seterusnya di thread latar (muat turun dulu kalau belum ada / sudah tiba masa). */
+    private void nextBackground() {
+        bgWorker.execute(() -> {
+            long now = SystemClock.elapsedRealtime();
+            boolean tryNet = Bing.due(this) && (lastBingTry == 0 || now - lastBingTry > 10 * 60_000L);
+            if (tryNet) {
+                lastBingTry = now;
+                Bing.refresh(this);
             }
-        }
-        if (!line.equals(shownLine)) {
-            shownLine = line;
-            lyric.setText(line);
-        }
+            List<File> pics = Bing.pictures(this);
+            if (pics.isEmpty()) return;
+            File f = pics.get(Math.floorMod(picIdx++, pics.size()));
+            Bitmap b = decode(f, 1280);
+            if (b != null) h.post(() -> showBackground(b));
+        });
     }
 
-    private void pollSession() {
-        if (polling || song == null) return;
-        polling = true;
-        final android.content.Context ctx = getApplicationContext();
-        new Thread(() -> {
-            NowPlayingPanel.Info i = NowPlayingPanel.readSession(ctx);
-            h.post(() -> {
-                polling = false;
-                applyPoll(i);
-            });
-        }, "ss-lyrics-poll").start();
+    private static Bitmap decode(File f, int targetW) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(f.getPath(), o);
+        if (o.outWidth <= 0) return null;
+        int sample = 1;
+        while (o.outWidth / (sample * 2) >= targetW) sample *= 2;
+        o.inJustDecodeBounds = false;
+        o.inSampleSize = sample;
+        o.inPreferredConfig = Bitmap.Config.RGB_565;
+        return BitmapFactory.decodeFile(f.getPath(), o);
     }
 
-    private void applyPoll(NowPlayingPanel.Info i) {
-        if (song == null) return;
-        if (i == null) {            // main sudah tamat
-            songPlaying = false;
-            return;
+    /** Fade silang: gambar baru masuk di lapisan belakang, lapisan depan pudar. */
+    private void showBackground(Bitmap b) {
+        if (isFinishing() || isDestroyed()) return;
+        ImageView front = frontA ? bgA : bgB, back = frontA ? bgB : bgA;
+        back.setImageBitmap(b);
+        back.setAlpha(0f);
+        back.animate().alpha(1f).setDuration(1500).start();
+        if (front.getDrawable() != null) {
+            front.animate().alpha(0f).setDuration(1500).withEndAction(() -> front.setImageDrawable(null)).start();
         }
-        // dumpsys boleh memotong tajuk pada koma pertama, jadi banding awalan sahaja.
-        if (i.title == null || !song.title.startsWith(i.title)) {
-            song = null;            // lagu bertukar: tempohnya tak diketahui, jadi tiada lirik
-            return;
-        }
-        songPos = i.pos;
-        songUpdated = i.updated > 0 ? i.updated : SystemClock.elapsedRealtime();
-        songSpeed = i.speed;
-        songPlaying = i.state == PlaybackState.STATE_PLAYING;
+        frontA = !frontA;
     }
 
     private int dp(int v) {

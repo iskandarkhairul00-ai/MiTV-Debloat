@@ -140,8 +140,9 @@ public class MainActivity extends Activity {
     private int glowColor = Color.TRANSPARENT;
     private ValueAnimator glowAnim;
     // Top bar, left to right: bell, Inputs, Wi-Fi, Sound, Settings (icon-only round buttons).
-    private static final int PILL_BELL = 0, PILL_INPUTS = 1, PILL_WIFI = 2, PILL_SOUND = 3, PILL_SETTINGS = 4;
+    private static final int PILL_INPUTS = 0, PILL_WIFI = 1, PILL_SETTINGS = 2;
     private View[] pills;
+    private View bellPill; // the bell is off the home screen; kept only so its old code still compiles
     private TextView bellBadge;
     private final Alerts.Listener alertsChanged = this::updateBell;
     private LinearLayout dockRow;
@@ -282,8 +283,10 @@ public class MainActivity extends Activity {
         dockRow = findViewById(R.id.dockRow);
         grid = findViewById(R.id.grid);
         menu = findViewById(R.id.menu);
-        pills = new View[] {findViewById(R.id.pillBell), findViewById(R.id.pillInputs), findViewById(R.id.pillWifi),
-                newSoundPill(), findViewById(R.id.pillSettings)};
+        pills = new View[] {findViewById(R.id.pillInputs), findViewById(R.id.pillWifi), findViewById(R.id.pillSettings)};
+        // No bell (notifications) and no sound button on the home screen.
+        bellPill = findViewById(R.id.pillBell);
+        ((View) bellPill.getParent()).setVisibility(View.GONE);
         bellBadge = findViewById(R.id.bellBadge);
         bellBadge.setTypeface(Fonts.outfit(this, 600));
         homeViews = new View[] {findViewById(R.id.clockBlock), findViewById(R.id.pills), findViewById(R.id.dockBand),
@@ -423,8 +426,9 @@ public class MainActivity extends Activity {
         card.setBackgroundResource(R.drawable.sys_bg);
         card.setPadding(px(14), px(9), px(12), px(10));
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, gravity);
-        if ((gravity & Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK) == Gravity.END) lp.setMarginEnd(margin);
-        else lp.setMarginStart(margin);
+        // Plain left/right margins: setMarginStart was ignored here and left the card at the screen edge.
+        if ((gravity & Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK) == Gravity.END) lp.setMargins(0, 0, margin, 0);
+        else lp.setMargins(margin, 0, 0, 0);
         page.addView(card, lp);
         return card;
     }
@@ -576,6 +580,7 @@ public class MainActivity extends Activity {
         newApps.removeAll(newDock);
         usageScores = scores;
         sortByUsage(newApps);
+        recentForContinue(all, scores);
 
         pruneTileCache(all);
         List<AppEntry> toRender = new ArrayList<>();
@@ -649,7 +654,8 @@ public class MainActivity extends Activity {
 
     /** Most used first (last 7 days); apps with no recorded use stay A-Z. List.sort is stable. */
     private void sortByUsage(List<AppEntry> list) {
-        UsageScores.sort(list, usageScores);
+        // Positions are fixed: the app grid under the dock no longer re-orders itself by use.
+        // (The Most used card still reads the usage scores.)
     }
 
     /** On every return home: re-rank the grid and refresh the card, keeping focus on the same app. */
@@ -663,6 +669,9 @@ public class MainActivity extends Activity {
 
     private void applyUsage(Map<String, Long> scores) {
         usageScores = scores;
+        List<AppEntry> every = new ArrayList<>(dock);
+        every.addAll(apps);
+        recentForContinue(every, scores);
         List<AppEntry> sorted = new ArrayList<>(apps);
         sortByUsage(sorted);
         if (!sorted.equals(apps)) {
@@ -675,6 +684,19 @@ public class MainActivity extends Activity {
         List<AppEntry> all = new ArrayList<>(dock);
         all.addAll(apps);
         usage.render(all, usageScores);
+    }
+
+    /** Continue watching falls back to the apps used most this week when no app publishes progress. */
+    private void recentForContinue(List<AppEntry> all, Map<String, Long> scores) {
+        List<AppEntry> used = new ArrayList<>();
+        for (AppEntry e : all) {
+            Long s = scores.get(e.pkg);
+            if (s != null && s > 0 && !e.pkg.equals(getPackageName())) used.add(e);
+        }
+        used.sort((a, b) -> Long.compare(scores.get(b.pkg), scores.get(a.pkg)));
+        List<String> pkgs = new ArrayList<>();
+        for (AppEntry e : used) if (pkgs.size() < 6) pkgs.add(e.pkg);
+        contPanel.setRecent(pkgs);
     }
 
     private void onTileReady(AppEntry e) {
@@ -1247,10 +1269,8 @@ public class MainActivity extends Activity {
                 else up.forceStop(upIdx);
                 break;
             case TOP:
-                if (topIdx == PILL_BELL) openBell();
-                else if (topIdx == PILL_INPUTS) openScreensaver();
+                if (topIdx == PILL_INPUTS) openScreensaver();
                 else if (topIdx == PILL_WIFI) startSafely(new Intent(Settings.ACTION_WIFI_SETTINGS));
-                else if (topIdx == PILL_SOUND) openSound();
                 else openSettings();
                 break;
             case DOCK:
@@ -1298,44 +1318,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    /**
-     * The Sound button (speaker icon) is added to the top bar in code, just before the Settings
-     * gear, with the same look, size and margins as the Wi-Fi button.
-     */
-    private View newSoundPill() {
-        LinearLayout bar = findViewById(R.id.pills);
-        View wifi = findViewById(R.id.pillWifi), gear = findViewById(R.id.pillSettings);
-        ImageView sound = new ImageView(this, null, 0, R.style.IconPill);
-        sound.setImageResource(R.drawable.ic_sound);
-        sound.setContentDescription("Sound");
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams((LinearLayout.LayoutParams) wifi.getLayoutParams());
-        bar.addView(sound, bar.indexOfChild(gear), lp);
-        return sound;
-    }
-
-    /**
-     * Opens the TV's own sound settings, where the Dolby Atmos / Dolby Audio mode lives (the
-     * speaker processing is the TV maker's, so the launcher can't switch it itself). Tries the
-     * standard action first, then the stock Android TV Settings sound page, then Settings.
-     */
-    private void openSound() {
-        Intent[] tries = {
-            new Intent(Settings.ACTION_SOUND_SETTINGS),
-            new Intent().setClassName("com.android.tv.settings", "com.android.tv.settings.device.sound.SoundActivity"),
-            new Intent(Settings.ACTION_SETTINGS),
-        };
-        for (Intent in : tries) {
-            try {
-                in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(in);
-                return;
-            } catch (ActivityNotFoundException | SecurityException ignored) {
-                // try the next one
-            }
-        }
-        Toast.makeText(this, "Not available on this TV", Toast.LENGTH_SHORT).show();
-    }
-
     private void startSafely(Intent intent) {
         try {
             startActivity(intent);
@@ -1349,7 +1331,7 @@ public class MainActivity extends Activity {
     /** Keeps the badge on the bell's top-right corner, following its zoom, page slides and fades. */
     private void placeBellBadge() {
         if (bellBadge.getVisibility() != View.VISIBLE) return;
-        View bell = pills[PILL_BELL];
+        View bell = bellPill;
         if (bell.getWidth() == 0) return;
         bell.getLocationInWindow(loc);
         int bx = loc[0], by = loc[1];
@@ -1370,10 +1352,10 @@ public class MainActivity extends Activity {
     /** Badge with the unread count; the bell turns amber while there's something new. */
     private void updateBell() {
         int n = Alerts.get().unread();
-        bellBadge.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
+        bellBadge.setVisibility(View.GONE); // the bell is hidden, so no badge
         bellBadge.setText(n > 9 ? "9+" : String.valueOf(n));
         bellBadge.post(this::placeBellBadge);
-        ((ImageView) pills[PILL_BELL]).setImageTintList(android.content.res.ColorStateList.valueOf(
+        ((ImageView) bellPill).setImageTintList(android.content.res.ColorStateList.valueOf(
                 n > 0 ? 0xFFFFB340 : 0xE6FFFFFF));
     }
 
@@ -1396,7 +1378,7 @@ public class MainActivity extends Activity {
         if (items.isEmpty()) items.add(new MenuItem("No notifications", () -> { }, R.drawable.ic_bell, 0x8CFFFFFF));
         else items.add(new MenuItem("Clear all", al::clear));
         al.markAllSeen();
-        View bell = pills[PILL_BELL];
+        View bell = bellPill;
         bell.getLocationInWindow(loc);
         int w = 420;
         showMenu(items, Math.min(loc[0], screenW - px(w + 24)), loc[1] + Math.round(bell.getHeight() * PILL_SCALE) + px(10), w);
@@ -1762,7 +1744,7 @@ public class MainActivity extends Activity {
         if (test == 2) return RainView.STORM;
         String cat = WeatherPanel.category(this);
         if (cat == null) return RainView.OFF;
-        if (cat.startsWith("storm")) return RainView.STORM;
+        if (cat.startsWith("storm") || WeatherPanel.heavyRain(this)) return RainView.STORM;
         if (cat.startsWith("rain")) return RainView.RAIN;
         return RainView.OFF;
     }
