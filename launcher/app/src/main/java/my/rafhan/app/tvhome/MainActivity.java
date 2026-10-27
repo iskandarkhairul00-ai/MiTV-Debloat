@@ -76,7 +76,7 @@ import java.util.concurrent.Executors;
  */
 public class MainActivity extends Activity {
     private static final int TOP = 0, DOCK = 1, GRID = 2, MENU = 3, NOW = 4, UP = 5, SETTINGS = 6,
-            REC = 7, CONT = 8;
+            REC = 7;
     private static final float NOW_SCALE = 1.12f;
     private static final int RIGHT_CARD_W = 412; // System and Now Playing cards, dp
     private static final int COLS = 5, DOCK_SIZE = DockConfig.MAX;
@@ -132,10 +132,10 @@ public class MainActivity extends Activity {
     private PrayerPanel prayer;
     private WeatherPanel weather;
     private UsagePanel usage;
-    // Bottom cards: Recommend watching (left) and Continue watching (right), built in code.
-    private WatchPanel recPanel, contPanel;
-    private LinearLayout recCard, contCard;
-    private int recIdx, contIdx;
+    // Bottom card: Recommend watching, full width, built in code.
+    private WatchPanel recPanel;
+    private LinearLayout recCard;
+    private int recIdx;
     private Map<String, Long> usageScores = new HashMap<>();
     private final GradientDrawable glowDrawable = new GradientDrawable();
     private int glowColor = Color.TRANSPARENT;
@@ -309,10 +309,8 @@ public class MainActivity extends Activity {
         });
         weather = new WeatherPanel(this, findViewById(R.id.weatherPanel), worker);
         usage = new UsagePanel(this, findViewById(R.id.usagePanel));
-        recCard = newWatchCard(Gravity.TOP | Gravity.START, px(64), px(390));
-        contCard = newWatchCard(Gravity.TOP | Gravity.END, px(64), px(RIGHT_CARD_W));
+        recCard = newWatchCard(Gravity.TOP | Gravity.START, px(64));
         recPanel = new WatchPanel(this, recCard, WatchPanel.RECOMMEND);
-        contPanel = new WatchPanel(this, contCard, WatchPanel.CONTINUE);
         alignSystemPanel();
         centreDatesOnClock();
 
@@ -421,15 +419,15 @@ public class MainActivity extends Activity {
     }
 
     /** A glass card on the home page for one of the two watching rows; position set in layoutWatchCards. */
-    private LinearLayout newWatchCard(int gravity, int margin, int width) {
+    private LinearLayout newWatchCard(int gravity, int margin) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackgroundResource(R.drawable.sys_bg);
         card.setPadding(px(14), px(9), px(12), px(10));
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, gravity);
-        // Plain left/right margins: setMarginStart was ignored here and left the card at the screen edge.
-        if ((gravity & Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK) == Gravity.END) lp.setMargins(0, 0, margin, 0);
-        else lp.setMargins(margin, 0, 0, 0);
+        // Left to right edge of the screen (same side margins as the cards above it).
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                Math.max(screenW - 2 * margin, margin), ViewGroup.LayoutParams.WRAP_CONTENT, gravity);
+        lp.setMargins(margin, 0, margin, 0);
         page.addView(card, lp);
         return card;
     }
@@ -443,13 +441,10 @@ public class MainActivity extends Activity {
         int bottom = heroTop - px(6);
         int tileH = Math.max(px(56), Math.min(px(90), bottom - top - px(9 + 14 + 6 + 10)));
         FrameLayout.LayoutParams l = (FrameLayout.LayoutParams) recCard.getLayoutParams();
-        FrameLayout.LayoutParams r = (FrameLayout.LayoutParams) contCard.getLayoutParams();
         l.topMargin = top;
-        r.topMargin = top;
+        l.width = screenW - 2 * px(64);
         recCard.setLayoutParams(l);
-        contCard.setLayoutParams(r);
         recPanel.setSize(l.width - px(14 + 12), tileH);
-        contPanel.setSize(r.width - px(14 + 12), tileH);
     }
 
     /**
@@ -581,7 +576,6 @@ public class MainActivity extends Activity {
         newApps.removeAll(newDock);
         usageScores = scores;
         sortByUsage(newApps);
-        recentForContinue(all, scores);
 
         pruneTileCache(all);
         List<AppEntry> toRender = new ArrayList<>();
@@ -671,7 +665,6 @@ public class MainActivity extends Activity {
         usageScores = scores;
         List<AppEntry> every = new ArrayList<>(dock);
         every.addAll(apps);
-        recentForContinue(every, scores);
         List<AppEntry> sorted = new ArrayList<>(apps);
         sortByUsage(sorted);
         if (!sorted.equals(apps)) {
@@ -686,18 +679,6 @@ public class MainActivity extends Activity {
         usage.render(all, usageScores);
     }
 
-    /** Continue watching falls back to the apps used most this week when no app publishes progress. */
-    private void recentForContinue(List<AppEntry> all, Map<String, Long> scores) {
-        List<AppEntry> used = new ArrayList<>();
-        for (AppEntry e : all) {
-            Long s = scores.get(e.pkg);
-            if (s != null && s > 0 && !e.pkg.equals(getPackageName())) used.add(e);
-        }
-        used.sort((a, b) -> Long.compare(scores.get(b.pkg), scores.get(a.pkg)));
-        List<String> pkgs = new ArrayList<>();
-        for (AppEntry e : used) if (pkgs.size() < 6) pkgs.add(e.pkg);
-        contPanel.setRecent(pkgs);
-    }
 
     private void onTileReady(AppEntry e) {
         int d = dock.indexOf(e);
@@ -763,7 +744,6 @@ public class MainActivity extends Activity {
             case GRID: return gridIdx;
             case NOW: return nowIdx;
             case REC: return recIdx;
-            case CONT: return contIdx;
             case UP: return upIdx;
             case SETTINGS: return 0;
             default: return menuIdx;
@@ -780,7 +760,6 @@ public class MainActivity extends Activity {
             case GRID: gridIdx = newIndex; break;
             case NOW: nowIdx = newIndex; break;
             case REC: recIdx = newIndex; recPanel.scrollTo(newIndex); break;
-            case CONT: contIdx = newIndex; contPanel.scrollTo(newIndex); break;
             case UP: upIdx = newIndex; break;
             case SETTINGS: break; // SettingsScreen keeps its own focus
             default: menuIdx = newIndex; break;
@@ -986,10 +965,6 @@ public class MainActivity extends Activity {
                 v = recPanel.cardAt(recIdx);
                 radius = px(9);
                 break;
-            case CONT:
-                v = contPanel.cardAt(contIdx);
-                radius = px(9);
-                break;
             case UP:
                 v = up.row(upIdx);
                 break;
@@ -1126,14 +1101,10 @@ public class MainActivity extends Activity {
         switch (section) {
             case DOCK:
                 if (recPanel.count() > 0) moveFocus(REC, Math.min(recIdx, recPanel.count() - 1));
-                else if (contPanel.count() > 0) moveFocus(CONT, Math.min(contIdx, contPanel.count() - 1));
                 else if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
                 else moveFocus(TOP, topIdx);
                 break;
             case REC:
-                moveFocus(TOP, topIdx);
-                break;
-            case CONT:
                 if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
                 else moveFocus(TOP, topIdx);
                 break;
@@ -1171,16 +1142,14 @@ public class MainActivity extends Activity {
             case TOP:
                 if (nowPlaying.isShown()) moveFocus(NOW, NowPlayingPanel.PLAY_PAUSE);
                 else if (recPanel.count() > 0) moveFocus(REC, Math.min(recIdx, recPanel.count() - 1));
-                else if (contPanel.count() > 0) moveFocus(CONT, Math.min(contIdx, contPanel.count() - 1));
                 else if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
                 else if (n > 0) moveFocus(GRID, 0);
                 break;
             case NOW:
-                if (contPanel.count() > 0) moveFocus(CONT, Math.min(contIdx, contPanel.count() - 1));
+                if (recPanel.count() > 0) moveFocus(REC, Math.min(recIdx, recPanel.count() - 1));
                 else if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
                 break;
             case REC:
-            case CONT:
                 if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
                 break;
             case UP:
@@ -1230,13 +1199,6 @@ public class MainActivity extends Activity {
             case REC: {
                 int i = recIdx + dir;
                 if (i >= 0 && i < recPanel.count()) moveFocus(REC, i);
-                else if (i >= recPanel.count() && contPanel.count() > 0) moveFocus(CONT, 0);
-                break;
-            }
-            case CONT: {
-                int i = contIdx + dir;
-                if (i >= 0 && i < contPanel.count()) moveFocus(CONT, i);
-                else if (i < 0 && recPanel.count() > 0) moveFocus(REC, recPanel.count() - 1);
                 break;
             }
             case GRID: {
@@ -1285,9 +1247,6 @@ public class MainActivity extends Activity {
             case REC:
                 recPanel.open(recIdx);
                 break;
-            case CONT:
-                contPanel.open(contIdx);
-                break;
             case MENU:
                 if (menuIdx < menuItems.size()) {
                     Runnable action = menuItems.get(menuIdx).action;
@@ -1313,7 +1272,7 @@ public class MainActivity extends Activity {
         else if (section == SETTINGS) {
             if (settingsScreen.back()) moveFocus(TOP, PILL_SETTINGS);
         } else if (section == UP) moveFocus(TOP, topIdx);
-        else if (section == GRID || section == TOP || section == NOW || section == REC || section == CONT) {
+        else if (section == GRID || section == TOP || section == NOW || section == REC) {
             if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
         }
     }
@@ -1686,7 +1645,6 @@ public class MainActivity extends Activity {
         prayer.refresh();
         weather.refresh();
         recPanel.refresh();
-        contPanel.refresh();
         rainFx.setMode(rainModeFor()); // the weather card's data can change any minute
         // Rotate / Weather wallpaper: the minute tick picks up the next picture when its 5 minutes start.
         String wp = LauncherSettings.wallpaper(this);

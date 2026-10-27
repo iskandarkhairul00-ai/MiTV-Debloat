@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -73,7 +74,9 @@ final class WatchPanel {
     private static final String COUNTRY = "MY";
 
     private static final Uri PREVIEW = Uri.parse("content://android.media.tv/preview_program");
-    private static final int MAX_ITEMS = 10, VISIBLE = 2, GAP_DP = 6;
+    private static final int MAX_ITEMS = 12, MIN_VISIBLE = 2, TILE_DP = 180, GAP_DP = 6;
+    /** Recommendations come only from these apps (matched by the start of the app's name). */
+    private static final String[] REC_APPS = {"nuvio", "loklok", "viu", "cineflow", "cloudstream"};
     private static final long MIN_GAP_MS = 3 * 60_000L;
     private static final int TEXT = 0xFFFFFFFF, DIM = 0xB3FFFFFF, DIM_HEADER = 0x8CFFFFFF, ACCENT = 0xFFFFC857;
     private static final String[] TYPES = {"Movie", "Series", "Season", "Episode", "Clip", "Event",
@@ -109,10 +112,12 @@ final class WatchPanel {
     private final List<View> cards = new ArrayList<>();
     private final Map<String, String> labels = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private int tileW, tileH;
+    private int tileW, tileH, visible = MIN_VISIBLE;
+    private volatile Map<String, String> recApps = new LinkedHashMap<>(); // package -> app name
     private int off;
     private long lastFetch, lastWeb;
     private final List<Item> webCache = new ArrayList<>();
+    private String webKey = "";
     private boolean fetching;
     private String status = "";
     private String signature = "";
@@ -146,8 +151,10 @@ final class WatchPanel {
 
     /** Called by MainActivity once the card's inner width and the tile height are known. */
     void setSize(int innerWidthPx, int tileHeightPx) {
-        int w = (innerWidthPx - px(GAP_DP) * (VISIBLE - 1)) / VISIBLE;
-        if (w == tileW && tileHeightPx == tileH) return;
+        int v = Math.max(MIN_VISIBLE, innerWidthPx / px(TILE_DP));
+        int w = (innerWidthPx - px(GAP_DP) * (v - 1)) / v;
+        if (w == tileW && tileHeightPx == tileH && v == visible) return;
+        visible = v;
         tileW = w;
         tileH = tileHeightPx;
         ViewGroup.LayoutParams lp = viewport.getLayoutParams();
@@ -170,7 +177,7 @@ final class WatchPanel {
     void scrollTo(int i) {
         if (i < 0 || i >= cards.size() || tileW == 0) return;
         int pitch = tileW + px(GAP_DP);
-        int w = viewport.getWidth() > 0 ? viewport.getWidth() : tileW * VISIBLE + px(GAP_DP);
+        int w = viewport.getWidth() > 0 ? viewport.getWidth() : tileW * visible + px(GAP_DP) * (visible - 1);
         if (i * pitch < off) off = i * pitch;
         else if (i * pitch + tileW > off + w) off = i * pitch + tileW - w;
         row.animate().cancel();
@@ -215,29 +222,33 @@ final class WatchPanel {
         IO.execute(() -> {
             List<Item> found = new ArrayList<>();
             String st = "";
-            try {
-                // Without this permission the provider doesn't fail, it just returns nothing.
-                if (ctx.checkSelfPermission("com.android.providers.tv.permission.READ_EPG_DATA")
-                        != PackageManager.PERMISSION_GRANTED) {
-                    throw new SecurityException("READ_EPG_DATA not granted");
-                }
-                found = query();
-            } catch (SecurityException e) {
-                st = "Can't read other apps' TV data yet. Run on a computer:\nadb shell pm grant my.rafhan.app\ncom.android.providers.tv.permission.READ_EPG_DATA";
-            } catch (Exception e) {
-                android.util.Log.w("TvHome", "watch query failed", e);
-                st = "Not available on this TV";
-            }
-            if (found.isEmpty() && mode == RECOMMEND) {
+            Map<String, String> apps = installedRecApps();
+            recApps = apps;
+            if (apps.isEmpty()) {
+                st = "Install Nuvio, LokLok, Viu, CineFlow or CloudStream";
+            } else {
+                // 1) rows the apps publish themselves (needs READ_EPG_DATA; silently skipped without it)
                 try {
-                    List<Item> web = online();
-                    if (!web.isEmpty()) {
-                        found = web;
-                        st = "";
+                    if (ctx.checkSelfPermission("com.android.providers.tv.permission.READ_EPG_DATA")
+                            == PackageManager.PERMISSION_GRANTED) {
+                        found = query();
                     }
                 } catch (Exception e) {
-                    android.util.Log.w("TvHome", "tvmaze failed", e);
+                    android.util.Log.w("TvHome", "watch query failed", e);
                 }
+                // 2) top up with this week's trending on TMDB; a tile opens one of those apps
+                if (found.size() < MAX_ITEMS) {
+                    try {
+                        List<Item> web = online(apps);
+                        for (Item it : web) {
+                            if (found.size() >= MAX_ITEMS) break;
+                            found.add(it);
+                        }
+                    } catch (Exception e) {
+                        android.util.Log.w("TvHome", "tmdb failed", e);
+                    }
+                }
+                if (found.isEmpty()) st = "No recommendations yet (needs internet)";
             }
             List<Item> done = found;
             String doneStatus = st;
@@ -247,6 +258,29 @@ final class WatchPanel {
                 apply(done);
             });
         });
+    }
+
+    /** Installed apps among REC_APPS, found by their launcher name (package names differ per build). */
+    private Map<String, String> installedRecApps() {
+        Map<String, String> out = new LinkedHashMap<>();
+        PackageManager pm = ctx.getPackageManager();
+        String[] cats = {Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER};
+        for (String cat : cats) {
+            Intent main = new Intent(Intent.ACTION_MAIN).addCategory(cat);
+            for (ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
+                String pkg = ri.activityInfo.packageName;
+                if (out.containsKey(pkg) || pkg.equals(ctx.getPackageName())) continue;
+                String label = String.valueOf(ri.loadLabel(pm));
+                String norm = label.toLowerCase(Locale.ROOT).replace(" ", "").replace("-", "");
+                for (String k : REC_APPS) {
+                    if (norm.startsWith(k)) {
+                        out.put(pkg, label);
+                        break;
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private List<Item> query() {
@@ -275,6 +309,7 @@ final class WatchPanel {
             while (c.moveToNext() && all.size() + typed.size() < 80) {
                 String pkg = str(c, iPkg), title = str(c, iTitle);
                 if (pkg == null || title == null || pkg.equals(ctx.getPackageName())) continue;
+                if (mode == RECOMMEND && !recApps.containsKey(pkg)) continue;
                 Item it = new Item();
                 it.pkg = pkg;
                 it.title = title;
@@ -321,29 +356,24 @@ final class WatchPanel {
 
     // ---------------------------------------------------------------- internet sources
 
-    /** TMDB first, TVmaze if that gives nothing; the result is kept for 30 minutes. */
-    private List<Item> online() {
+    /** This week's trending on TMDB, kept for 30 minutes (per set of installed apps). */
+    private List<Item> online(Map<String, String> apps) {
         long now = System.currentTimeMillis();
+        String key = apps.keySet().toString();
         synchronized (webCache) {
-            if (!webCache.isEmpty() && now - lastWeb < 30 * 60_000L) return new ArrayList<>(webCache);
+            if (!webCache.isEmpty() && key.equals(webKey) && now - lastWeb < 30 * 60_000L) return new ArrayList<>(webCache);
         }
         List<Item> out = new ArrayList<>();
         try {
-            out = tmdbShows();
+            out = tmdbTrending(apps);
         } catch (Exception e) {
             android.util.Log.w("TvHome", "tmdb failed", e);
-        }
-        if (out.isEmpty()) {
-            try {
-                out = tvmazeShows();
-            } catch (Exception e) {
-                android.util.Log.w("TvHome", "tvmaze failed", e);
-            }
         }
         if (!out.isEmpty()) {
             synchronized (webCache) {
                 webCache.clear();
                 webCache.addAll(out);
+                webKey = key;
                 lastWeb = now;
             }
         }
@@ -389,16 +419,16 @@ final class WatchPanel {
     }
 
     /**
-     * This week's trending movies and series on TMDB, each matched to the streaming service that
-     * carries it in Malaysia (the service must be one we know an Android TV app for).
+     * This week's trending movies and series on TMDB. The apps don't expose their catalogs, so
+     * the titles are shared out between the installed apps in turn, and a tile opens its app.
      */
-    private List<Item> tmdbShows() throws Exception {
-        List<Item> installed = new ArrayList<>(), others = new ArrayList<>();
-        if (TMDB_KEY.isEmpty()) return installed;
+    private List<Item> tmdbTrending(Map<String, String> apps) throws Exception {
+        List<Item> out = new ArrayList<>();
+        if (TMDB_KEY.isEmpty() || apps.isEmpty()) return out;
+        List<String> pkgs = new ArrayList<>(apps.keySet());
         JSONObject trending = new JSONObject(httpText(TMDB + "trending/all/week?api_key=" + TMDB_KEY + "&language=en-US"));
         JSONArray res = trending.optJSONArray("results");
-        int checked = 0;
-        for (int i = 0; res != null && i < res.length() && checked < 16; i++) {
+        for (int i = 0; res != null && i < res.length() && out.size() < MAX_ITEMS; i++) {
             JSONObject o = res.optJSONObject(i);
             if (o == null) continue;
             String mt = o.optString("media_type", "");
@@ -408,33 +438,8 @@ final class WatchPanel {
             String art = text(o, "backdrop_path");
             if (art == null) art = text(o, "poster_path");
             if (title == null || art == null) continue;
-            checked++;
 
-            // Which service carries it here? Prefer one whose app is installed on this TV.
-            String pkg = null, provider = null;
-            boolean have = false;
-            try {
-                JSONObject pr = new JSONObject(httpText(TMDB + mt + "/" + o.optInt("id")
-                        + "/watch/providers?api_key=" + TMDB_KEY));
-                JSONObject results = pr.optJSONObject("results");
-                JSONObject here = results == null ? null : results.optJSONObject(COUNTRY);
-                JSONArray flat = here == null ? null : here.optJSONArray("flatrate");
-                for (int j = 0; flat != null && j < flat.length() && !have; j++) {
-                    String name = flat.optJSONObject(j) == null ? "" : flat.optJSONObject(j).optString("provider_name", "");
-                    String pk = packageFor(name);
-                    if (pk == null) continue;
-                    boolean in = isInstalled(pk);
-                    if (pkg == null || in) {
-                        pkg = pk;
-                        provider = name;
-                        have = in;
-                    }
-                }
-            } catch (Exception ignored) {
-                // no provider info for this one: skipped below
-            }
-            if (pkg == null) continue;
-
+            String pkg = pkgs.get(out.size() % pkgs.size());
             List<String> parts = new ArrayList<>();
             parts.add(tv ? "Series" : "Movie");
             JSONArray ids = o.optJSONArray("genre_ids");
@@ -442,7 +447,7 @@ final class WatchPanel {
             if (genre != null) parts.add(genre);
             String date = text(o, tv ? "first_air_date" : "release_date");
             if (date != null && date.length() >= 4) parts.add(date.substring(0, 4));
-            parts.add(provider);
+            parts.add(apps.get(pkg));
 
             Item it = new Item();
             it.title = title;
@@ -451,58 +456,7 @@ final class WatchPanel {
             it.art = TMDB_IMG + art;
             it.web = true;
             it.src = "TMDB";
-            (have ? installed : others).add(it);
-        }
-        List<Item> out = onePerApp(installed);
-        if (out.size() < 4) {
-            List<Item> more = onePerApp(others);
-            out.addAll(more.subList(0, Math.min(more.size(), 6 - out.size())));
-        }
-        return out;
-    }
-
-    // ---- TVmaze (used when TMDB gives nothing)
-
-    private List<Item> tvmazeShows() throws Exception {
-        String body = httpText("https://api.tvmaze.com/schedule/web?date=" + java.time.LocalDate.now());
-        JSONArray eps = new JSONArray(body);
-        List<Item> installed = new ArrayList<>(), others = new ArrayList<>();
-        Set<Integer> seen = new HashSet<>();
-        for (int i = 0; i < eps.length() && installed.size() + others.size() < 80; i++) {
-            JSONObject ep = eps.optJSONObject(i);
-            JSONObject emb = ep == null ? null : ep.optJSONObject("_embedded");
-            JSONObject show = emb == null ? null : emb.optJSONObject("show");
-            if (show == null || !seen.add(show.optInt("id"))) continue;
-            JSONObject ch = show.optJSONObject("webChannel");
-            String channel = ch == null ? "" : ch.optString("name", "");
-            String pkg = packageFor(channel);
-            JSONObject img = show.optJSONObject("image");
-            String art = img == null ? "" : img.optString("original", img.optString("medium", ""));
-            String name = show.optString("name", "");
-            if (pkg == null || art.isEmpty() || name.isEmpty()) continue;
-
-            List<String> parts = new ArrayList<>();
-            String type = show.optString("type", "");
-            parts.add(type.isEmpty() || type.equals("Scripted") ? "Series" : type);
-            JSONArray genres = show.optJSONArray("genres");
-            if (genres != null && genres.length() > 0) parts.add(genres.optString(0));
-            int season = ep.optInt("season", 0), number = ep.optInt("number", 0);
-            if (season > 0 && number > 0) parts.add("S" + season + " E" + number);
-            parts.add(channel);
-
-            Item it = new Item();
-            it.title = name;
-            it.meta = join(parts);
-            it.pkg = pkg;
-            it.art = art.replace("http://", "https://");
-            it.web = true;
-            it.src = "TVmaze";
-            (isInstalled(pkg) ? installed : others).add(it);
-        }
-        List<Item> out = onePerApp(installed);
-        if (out.size() < 4) {
-            List<Item> more = onePerApp(others);
-            out.addAll(more.subList(0, Math.min(more.size(), 6 - out.size())));
+            out.add(it);
         }
         return out;
     }
@@ -510,22 +464,6 @@ final class WatchPanel {
     private boolean isInstalled(String pkg) {
         PackageManager pm = ctx.getPackageManager();
         return pm.getLaunchIntentForPackage(pkg) != null || pm.getLeanbackLaunchIntentForPackage(pkg) != null;
-    }
-
-    /** The Android TV app for a streaming service name as TVmaze writes it; null for other services. */
-    private static String packageFor(String channel) {
-        String c = channel.toLowerCase(Locale.ROOT);
-        if (c.contains("netflix")) return "com.netflix.ninja";
-        if (c.contains("prime video") || c.contains("amazon")) return "com.amazon.amazonvideo.livingroom";
-        if (c.contains("disney")) return "com.disney.disneyplus";
-        if (c.contains("hbo") || c.equals("max")) return "com.wbd.stream";
-        if (c.contains("apple tv")) return "com.apple.atve.androidtv.appletv";
-        if (c.contains("youtube")) return "com.google.android.youtube.tv";
-        if (c.contains("paramount")) return "com.cbs.ott";
-        if (c.contains("viu")) return "com.vuclip.viu";
-        if (c.contains("iqiyi")) return "com.iqiyi.i18n.tv";
-        if (c.contains("wetv")) return "com.tencent.qqlivei18n";
-        return null;
     }
 
     private static String httpText(String url) throws Exception {
@@ -622,19 +560,19 @@ final class WatchPanel {
         cards.clear();
         if (tileW == 0) return;
         // Explicit width: the row is wider than the card, the viewport clips it.
-        int n = Math.max(items.size(), VISIBLE);
+        int n = Math.max(items.size(), visible);
         row.setLayoutParams(new FrameLayout.LayoutParams(
                 n * tileW + (n - 1) * px(GAP_DP), ViewGroup.LayoutParams.MATCH_PARENT));
         countView.setText(items.isEmpty() ? "" : items.get(0).web ? "via " + items.get(0).src
                 : items.size() + (items.size() == 1 ? " app" : " items"));
         if (items.isEmpty()) {
             TextView t = new TextView(ctx);
-            t.setText(!status.isEmpty() ? status : mode == RECOMMEND ? "No recommendations yet (needs internet and a streaming app)" : "Nothing to continue yet");
+            t.setText(!status.isEmpty() ? status : mode == RECOMMEND ? "No recommendations yet (needs internet)" : "Nothing to continue yet");
             t.setTextSize(11f);
             t.setTextColor(DIM_HEADER);
             t.setTypeface(Fonts.outfit(ctx, 400));
             t.setGravity(Gravity.CENTER_VERTICAL);
-            row.addView(t, new LinearLayout.LayoutParams(tileW * VISIBLE + px(GAP_DP), tileH));
+            row.addView(t, new LinearLayout.LayoutParams(tileW * visible + px(GAP_DP) * (visible - 1), tileH));
             return;
         }
         for (int i = 0; i < items.size(); i++) {
