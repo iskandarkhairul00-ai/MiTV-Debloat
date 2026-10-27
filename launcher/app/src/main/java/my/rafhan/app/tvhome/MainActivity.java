@@ -103,22 +103,6 @@ public class MainActivity extends Activity {
     private final int[] loc = new int[2];
     private long lastBackUp = 0;
 
-    /** Radio button in the top bar, placed right after Wi-Fi with the same look, size and margins. */
-    private View newRadioPill() {
-        LinearLayout bar = findViewById(R.id.pills);
-        View wifi = findViewById(R.id.pillWifi), gear = findViewById(R.id.pillSettings);
-        ImageView radio = new ImageView(this, null, 0, R.style.IconPill);
-        radio.setImageResource(R.drawable.ic_radio);
-        radio.setContentDescription("Radio");
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams((LinearLayout.LayoutParams) wifi.getLayoutParams());
-        bar.addView(radio, bar.indexOfChild(gear), lp);
-        return radio;
-    }
-
-    private void openRadio() {
-        // TODO: replace with startActivity(new Intent(this, RadioActivity.class)); once RadioActivity exists.
-        Toast.makeText(this, "Radio akan datang", Toast.LENGTH_SHORT).show();
-    }
     private void openScreensaver() {
     Intent i = new Intent(this, ScreensaverActivity.class);
     i.putExtra(ScreensaverActivity.EXTRA_HIJRI, hijri.getText().toString());
@@ -156,8 +140,8 @@ public class MainActivity extends Activity {
     private final GradientDrawable glowDrawable = new GradientDrawable();
     private int glowColor = Color.TRANSPARENT;
     private ValueAnimator glowAnim;
-    // Top bar, left to right: bell, Inputs, Wi-Fi, Sound, Settings (icon-only round buttons).
-    private static final int PILL_INPUTS = 0, PILL_WIFI = 1, PILL_RADIO = 2, PILL_SETTINGS = 3;
+    // Top bar, left to right: bell, Inputs, Wi-Fi, Settings (icon-only round buttons).
+    private static final int PILL_INPUTS = 0, PILL_WIFI = 1, PILL_SETTINGS = 2;
     private View[] pills;
     private View bellPill; // the bell is off the home screen; kept only so its old code still compiles
     private TextView bellBadge;
@@ -300,7 +284,7 @@ public class MainActivity extends Activity {
         dockRow = findViewById(R.id.dockRow);
         grid = findViewById(R.id.grid);
         menu = findViewById(R.id.menu);
-        pills = new View[] {findViewById(R.id.pillInputs), findViewById(R.id.pillWifi), newRadioPill(), findViewById(R.id.pillSettings)};
+        pills = new View[] {findViewById(R.id.pillInputs), findViewById(R.id.pillWifi), findViewById(R.id.pillSettings)};
         // No bell (notifications) and no sound button on the home screen.
         bellPill = findViewById(R.id.pillBell);
         ((View) bellPill.getParent()).setVisibility(View.GONE);
@@ -1287,7 +1271,6 @@ public class MainActivity extends Activity {
             case TOP:
                 if (topIdx == PILL_INPUTS) openScreensaver();
                 else if (topIdx == PILL_WIFI) startSafely(new Intent(Settings.ACTION_WIFI_SETTINGS));
-                else if (topIdx == PILL_RADIO) openRadio();
                 else openSettings();
                 break;
             case DOCK:
