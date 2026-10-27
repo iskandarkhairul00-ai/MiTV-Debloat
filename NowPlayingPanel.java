@@ -16,7 +16,10 @@ import android.media.session.PlaybackState;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -40,7 +43,7 @@ import java.util.regex.Pattern;
 
 /**
  * "Now Playing" card: what another app is playing (cover, title, artist, app, progress) with
- * Play/Pause, Stop and Open app buttons that MainActivity's remote focus can reach.
+ * Mode, Previous, Play/Pause, Next and Open app buttons that MainActivity's remote focus can reach.
  *
  * This low-RAM TV won't let apps read other apps' media sessions (notification-listener access
  * is refused), so the data comes from outside the app:
@@ -491,8 +494,4 @@ final class NowPlayingPanel {
                 : state == PlaybackState.STATE_PAUSED ? 1 : 0;
     }
 
-    // ---------------------------------------------------------------- display
-
-    private void show(Info i) {
-        info = i;
-    
+    //
