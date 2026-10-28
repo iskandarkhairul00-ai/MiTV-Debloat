@@ -134,6 +134,12 @@ final class WeatherPanel {
         return code < 0 ? null : categoryOf(code);
     }
 
+    /** Kod cuaca WMO semasa (Open-Meteo), atau -1 kalau belum diketahui. Untuk aras hujan. */
+    static int code(Context ctx) {
+        category(ctx); // isi lastCode dari cache kalau perlu
+        return lastCode;
+    }
+
     private static String categoryOf(int code) {
         if (code >= 95) return "storm";
         if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "rain";

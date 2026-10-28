@@ -393,7 +393,7 @@ final class SettingsScreen {
                 new int[] {0, 1, 2, 3}, new String[] {"Off", "Low", "Medium", "High"}));
         out.add(toggle(LauncherSettings.RAIN_FX, "Rain effect", "Rain falls over the home screen when it really rains; lightning in a thunderstorm"));
         out.add(choice(LauncherSettings.RAIN_TEST, "Rain test", "Force the effect to see it now; Auto follows the real weather",
-                new int[] {0, 1, 2}, new String[] {"Auto", "Rain", "Storm"}));
+                new int[] {0, 3, 1, 4, 2}, new String[] {"Auto", "Drizzle", "Rain", "Heavy rain", "Storm"}));
         Row w = new Row(PICKER, "Wallpaper");
         w.sub = "Bing photo of the day, built-in photos or your own";
         String name = wallpaperName(LauncherSettings.wallpaper(ctx));

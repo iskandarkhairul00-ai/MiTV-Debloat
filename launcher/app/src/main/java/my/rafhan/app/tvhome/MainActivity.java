@@ -1768,10 +1768,15 @@ public class MainActivity extends Activity {
         int test = LauncherSettings.choice(this, LauncherSettings.RAIN_TEST);
         if (test == 1) return RainView.RAIN;
         if (test == 2) return RainView.STORM;
-        String cat = WeatherPanel.category(this);
-        if (cat == null) return RainView.OFF;
-        if (cat.startsWith("storm")) return RainView.STORM;
-        if (cat.startsWith("rain")) return RainView.RAIN;
+        if (test == 3) return RainView.DRIZZLE;
+        if (test == 4) return RainView.HEAVY;
+        // Pemetaan kod WMO sama seperti Glass TV: gerimis, hujan, hujan lebat, ribut + kilat.
+        int code = WeatherPanel.code(this);
+        if (code < 0) return RainView.OFF;
+        if (code >= 95) return RainView.STORM;
+        if (code >= 51 && code <= 57) return RainView.DRIZZLE;
+        if (code == 65 || code == 67 || code == 82) return RainView.HEAVY;
+        if ((code >= 61 && code <= 66) || code == 80 || code == 81) return RainView.RAIN;
         return RainView.OFF;
     }
 
