@@ -104,13 +104,19 @@ public class MainActivity extends Activity {
     private final int[] loc = new int[2];
 
     private void openScreensaver() {
-    Intent i = new Intent(this, ScreensaverActivity.class);
-    i.putExtra(ScreensaverActivity.EXTRA_HIJRI, hijri.getText().toString());
-    i.putExtra(ScreensaverActivity.EXTRA_TITLE, nowPlaying.screensaverTitle());
-    i.putExtra(ScreensaverActivity.EXTRA_ARTIST, nowPlaying.screensaverArtist());
-    i.putExtra(ScreensaverActivity.EXTRA_LIVE, nowPlaying.screensaverLive());
-    ScreensaverActivity.cover = nowPlaying.screensaverCover();
-    startActivity(i);
+        backArmedAt = 0; // a fresh double-Back is needed after the screensaver closes
+        if (!resumed) return; // only from the home screen itself, never from the background
+        Intent i = new Intent(this, ScreensaverActivity.class);
+        i.putExtra(ScreensaverActivity.EXTRA_HIJRI, hijri.getText().toString());
+        i.putExtra(ScreensaverActivity.EXTRA_TITLE, nowPlaying.screensaverTitle());
+        i.putExtra(ScreensaverActivity.EXTRA_ARTIST, nowPlaying.screensaverArtist());
+        i.putExtra(ScreensaverActivity.EXTRA_LIVE, nowPlaying.screensaverLive());
+        ScreensaverActivity.cover = nowPlaying.screensaverCover();
+        try {
+            startActivity(i);
+        } catch (RuntimeException ex) { // ActivityNotFound / Security: never crash on Back
+            Toast.makeText(this, "Screensaver not available", Toast.LENGTH_SHORT).show();
+        }
     }
     private float dp;
     private int screenW, screenH;
@@ -190,6 +196,11 @@ public class MainActivity extends Activity {
     // against this, so it goes straight to its final spot while the list scrolls under it.
     private int gridScrollTarget;
     private int armedKey = KeyEvent.KEYCODE_UNKNOWN;
+    // Back twice -> screensaver. The second Back must come within DOUBLE_BACK_MS of the first;
+    // two Backs closer than BACK_DEBOUNCE_MS are one press (remote contact bounce).
+    private static final long DOUBLE_BACK_MS = 2000, BACK_DEBOUNCE_MS = 150;
+    private long backArmedAt; // uptime of the first Back; 0 = not waiting for a second one
+    private long lastBackSeen;
     private boolean resumed;
     // Home was hidden (another app on top) since it was last resumed. Android pauses an
     // activity before handing it a new intent, so `resumed` can't tell "Home pressed on home".
@@ -1266,22 +1277,50 @@ public class MainActivity extends Activity {
     }
 
     private void onBack() {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastBackSeen < BACK_DEBOUNCE_MS) return; // duplicate event from one press
+        lastBackSeen = now;
+
+        // Closing a menu / edit mode / Settings is plain navigation: it never counts as one of
+        // the two Backs, so backing out of nested screens can't open the screensaver by accident.
         if (editMode == EDIT_MOVE) {
+            backArmedAt = 0;
             finishMove();
             return;
         }
         if (editMode == EDIT_REPLACE) {
+            backArmedAt = 0;
             editMode = EDIT_NONE;
             replaceWith = null;
             moveFocus(GRID, gridIdx); // back to the app that was going to be added
             return;
         }
-        if (section == MENU) closeMenu();
-        else if (section == SETTINGS) {
+        if (section == MENU) {
+            backArmedAt = 0;
+            closeMenu();
+            return;
+        }
+        if (section == SETTINGS) {
+            backArmedAt = 0;
             if (settingsScreen.back()) moveFocus(TOP, PILL_SETTINGS);
-        } else if (section == UP) moveFocus(TOP, topIdx);
-        else if (section == GRID || section == TOP || section == NOW || section == REC) {
-            if (!dock.isEmpty()) moveFocus(DOCK, dockIdx);
+            return;
+        }
+        if (section == UP) {
+            backArmedAt = 0;
+            moveFocus(TOP, topIdx);
+            return;
+        }
+
+        // DOCK / GRID / TOP / NOW / REC.
+        boolean atBase = section == DOCK || dock.isEmpty();
+        if (!atBase) {
+            moveFocus(DOCK, dockIdx); // this press goes home and counts as the first Back
+            backArmedAt = now;
+        } else if (backArmedAt != 0 && now - backArmedAt <= DOUBLE_BACK_MS) {
+            backArmedAt = 0;
+            openScreensaver();
+        } else {
+            backArmedAt = now; // first Back at the dock: wait for the second
         }
     }
 
@@ -1938,6 +1977,7 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus) armedKey = KeyEvent.KEYCODE_UNKNOWN; // its release would go to the other window
         updateLive();
     }
 
@@ -1958,6 +1998,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         // Home pressed while already home: close the menu and go back to the dock.
+        backArmedAt = 0;
         if (!hiddenSinceResume) {
             if (section == MENU) closeMenu();
             if (section != DOCK && !dock.isEmpty()) moveFocus(DOCK, dockIdx);
@@ -1967,6 +2008,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        armedKey = KeyEvent.KEYCODE_UNKNOWN; // a key that went down here may be released elsewhere
+        backArmedAt = 0;
         RemoteBridge.detach(remoteKeys);
         unregisterReceiver(timeReceiver);
         updateLive();
