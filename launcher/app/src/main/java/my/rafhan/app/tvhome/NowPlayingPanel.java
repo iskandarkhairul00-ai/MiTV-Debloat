@@ -483,6 +483,23 @@ final class NowPlayingPanel {
         return s == null || s.isEmpty() || s.equals("null") ? null : s;
     }
 
+    /** Nama keadaan main untuk dashboard remote telefon (RemoteDashboard menghantarnya sebagai "state"). */
+    static String stateLabel(int state) {
+        switch (state) {
+            case PlaybackState.STATE_PLAYING:
+                return "playing";
+            case PlaybackState.STATE_PAUSED:
+                return "paused";
+            case PlaybackState.STATE_BUFFERING:
+            case PlaybackState.STATE_CONNECTING:
+                return "buffering";
+            case PlaybackState.STATE_STOPPED:
+                return "stopped";
+            default:
+                return "idle";
+        }
+    }
+
     private static int rank(int state) {
         return state == PlaybackState.STATE_PLAYING ? 3
                 : state == PlaybackState.STATE_BUFFERING || state == PlaybackState.STATE_CONNECTING ? 2
