@@ -4,7 +4,6 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -40,29 +39,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Home card with a row of wide tiles, one per app: "Recommend watching" (what each app offers
- * on its Android TV home rows: preview programs) or "Continue watching" (Watch Next programs,
- * with a progress bar). Both come from the system TV provider, the same data the stock Android
- * TV launcher shows.
+ * "Recommend watching": a full-width row of wide tiles. Recommendations are for the streaming
+ * apps installed on this TV: LokTV, Nuvio, Bilibili, CineFlow, Viu, IDLIX, YouTube and CloudStream XR (found by app name,
+ * so no package names to maintain).
  *
- * Reading other apps' programs needs com.android.providers.tv.permission.READ_EPG_DATA. Declare
- * it in AndroidManifest.xml and grant it once over ADB:
- *   adb shell pm grant my.rafhan.app com.android.providers.tv.permission.READ_EPG_DATA
- * Without it the card shows a short hint instead of tiles. Which apps publish rows is up to the
- * apps themselves (YouTube, Netflix and Disney+ usually do).
- *
- * Recommend watching has two more sources for when no app publishes recommendations (or the
- * permission above isn't granted): what's trending this week on TMDB, matched to the streaming
- * service that carries it in Malaysia; and, if TMDB gives nothing, today's new episodes from
- * TVmaze (api.tvmaze.com, free, no key). Services whose app is installed on this TV come first.
+ *  1. If one of those apps publishes preview programs to the system TV provider, those come first
+ *     (needs com.android.providers.tv.permission.READ_EPG_DATA; without it this step is skipped).
+ *  2. The rest are this week's trending titles on TMDB, each handed to one of the installed apps:
+ *     Anime goes to Bilibili, other Asian-language titles to LokTV / Viu / IDLIX / CineFlow, the
+ *     rest to Nuvio / CloudStream / IDLIX / CineFlow, and YouTube gets some too (its tile opens a
+ *     trailer search). OK on a tile opens that app (CloudStream with a search for the title).
  *
  * Memory: at most MAX_ITEMS tiles, posters decoded at tile size in RGB_565 and kept in a tiny
  * LRU cache; one query every few minutes on a private single thread, never on the main thread.
+ * This product uses the TMDB API but is not endorsed or certified by TMDB.
  */
 final class WatchPanel {
-    static final int RECOMMEND = 0, CONTINUE = 1;
-
-    private static final Uri WATCH_NEXT = Uri.parse("content://android.media.tv/watch_next_program");
     /**
      * TMDB (themoviedb.org) API key, free and read-only. It sits in the public repo, so anyone can
      * read it: if it is ever abused, create a new one in TMDB Settings > API and paste it here.
@@ -74,10 +66,14 @@ final class WatchPanel {
     private static final String COUNTRY = "MY";
 
     private static final Uri PREVIEW = Uri.parse("content://android.media.tv/preview_program");
-    private static final int MAX_ITEMS = 12, MIN_VISIBLE = 2, TILE_DP = 180, GAP_DP = 6;
-    /** Recommendations come only from these apps (matched by the start of the app's name). */
-    private static final String[] REC_APPS = {"nuvio", "loklok", "viu", "cineflow", "cloudstream"};
-    private static final long MIN_GAP_MS = 3 * 60_000L;
+    private static final int MAX_ITEMS = 12, GAP_DP = 6, TARGET_TILE_DP = 180;
+    /** Apps recommendations are made for (matched against the installed app's name / package). */
+    private static final String[] SOURCES = {"loktv", "nuvio", "bilibili", "cineflow", "viu", "idlix", "youtube", "cloudstream"};
+    /** Labels containing one of these are skipped (YouTube Music, YouTube Kids ...). */
+    private static final String[] SKIP = {"music", "kids"};
+    private static final Set<String> ASIAN = new HashSet<>(java.util.Arrays.asList(
+            "ko", "zh", "cn", "ja", "th", "id", "ms", "tl", "vi", "hi", "ta"));
+    private static final long MIN_GAP_MS = 20 * 60_000L; // new picks every 20 min (and on a retry after 1 min if empty)
     private static final int TEXT = 0xFFFFFFFF, DIM = 0xB3FFFFFF, DIM_HEADER = 0x8CFFFFFF, ACCENT = 0xFFFFC857;
     private static final String[] TYPES = {"Movie", "Series", "Season", "Episode", "Clip", "Event",
             "Channel", "Track", "Album", "Artist", "Playlist", "Station", "Game"};
@@ -93,14 +89,13 @@ final class WatchPanel {
 
     private static final class Item {
         String title, meta, pkg, intentUri, art;
-        float progress = -1f;
-        boolean appTile; // no artwork from the app: show its banner/icon (Continue's fallback)
-        boolean web;     // from the internet (Recommend's fallback)
-        String src = "";  // which site: TMDB or TVmaze
+        boolean web;      // from the internet (TMDB), not from the app's own programs
+        boolean tv, asian, anime; // TMDB candidates: series or movie, Asian-language, animation / Japanese
+        String base = "";  // meta without the app name
+        String src = "";
     }
 
     private final Context ctx;
-    private final int mode;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final float dp;
     private final TextView countView;
@@ -108,28 +103,27 @@ final class WatchPanel {
     private final LinearLayout row;
     private final List<Item> items = new ArrayList<>();
     private final List<Item> fetched = new ArrayList<>(); // what the TV provider returned
-    private List<String> recent = new ArrayList<>();       // most used apps, for Continue's fallback
     private final List<View> cards = new ArrayList<>();
     private final Map<String, String> labels = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private int tileW, tileH, visible = MIN_VISIBLE;
-    private volatile Map<String, String> recApps = new LinkedHashMap<>(); // package -> app name
+    private int tileW, tileH, visible = 2;
     private int off;
     private long lastFetch, lastWeb;
+    private final List<Item> pool = new ArrayList<>(); // TMDB candidates, reshuffled on every refresh
+    private long poolAt;
+    private final Set<String> lastShown = new HashSet<>();
     private final List<Item> webCache = new ArrayList<>();
-    private String webKey = "";
     private boolean fetching;
     private String status = "";
     private String signature = "";
 
-    WatchPanel(Context ctx, LinearLayout root, int mode) {
+    WatchPanel(Context ctx, LinearLayout root) {
         this.ctx = ctx;
-        this.mode = mode;
         dp = ctx.getResources().getDisplayMetrics().density;
 
         LinearLayout header = new LinearLayout(ctx);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(small(mode == RECOMMEND ? "RECOMMEND WATCHING" : "CONTINUE WATCHING", DIM_HEADER));
+        header.addView(small("RECOMMEND WATCHING", DIM_HEADER));
         countView = small("", ACCENT);
         countView.setGravity(Gravity.END);
         header.addView(countView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -151,10 +145,11 @@ final class WatchPanel {
 
     /** Called by MainActivity once the card's inner width and the tile height are known. */
     void setSize(int innerWidthPx, int tileHeightPx) {
-        int v = Math.max(MIN_VISIBLE, innerWidthPx / px(TILE_DP));
-        int w = (innerWidthPx - px(GAP_DP) * (v - 1)) / v;
-        if (w == tileW && tileHeightPx == tileH && v == visible) return;
-        visible = v;
+        int gap = px(GAP_DP);
+        int vis = Math.max(2, (innerWidthPx + gap) / (px(TARGET_TILE_DP) + gap));
+        int w = (innerWidthPx - gap * (vis - 1)) / vis;
+        if (w == tileW && tileHeightPx == tileH && vis == visible) return;
+        visible = vis;
         tileW = w;
         tileH = tileHeightPx;
         ViewGroup.LayoutParams lp = viewport.getLayoutParams();
@@ -177,7 +172,7 @@ final class WatchPanel {
     void scrollTo(int i) {
         if (i < 0 || i >= cards.size() || tileW == 0) return;
         int pitch = tileW + px(GAP_DP);
-        int w = viewport.getWidth() > 0 ? viewport.getWidth() : tileW * visible + px(GAP_DP) * (visible - 1);
+        int w = viewport.getWidth() > 0 ? viewport.getWidth() : tileW * visible + px(GAP_DP);
         if (i * pitch < off) off = i * pitch;
         else if (i * pitch + tileW > off + w) off = i * pitch + tileW - w;
         row.animate().cancel();
@@ -196,6 +191,27 @@ final class WatchPanel {
             }
         } catch (Exception ignored) {
             // fall through to just opening the app
+        }
+        if (it.web && it.pkg != null && it.pkg.startsWith("com.google.android.youtube")) {
+            try { // YouTube: search for the trailer
+                Intent y = new Intent(Intent.ACTION_VIEW, Uri.parse(
+                        "https://www.youtube.com/results?search_query=" + Uri.encode(it.title + " trailer")));
+                y.setPackage(it.pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(y);
+                return;
+            } catch (Exception ignored) {
+                // fall through to the plain launch below
+            }
+        }
+        if (it.web && it.pkg != null && it.pkg.toLowerCase(Locale.ROOT).contains("cloudstream")) {
+            try { // CloudStream's search link; if this build lacks it, the plain launch below runs
+                Intent s = new Intent(Intent.ACTION_VIEW, Uri.parse("cloudstreamsearch://" + Uri.encode(it.title)));
+                s.setPackage(it.pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(s);
+                return;
+            } catch (Exception ignored) {
+                // fall through
+            }
         }
         try {
             Intent in = ctx.getPackageManager().getLaunchIntentForPackage(it.pkg);
@@ -222,131 +238,98 @@ final class WatchPanel {
         IO.execute(() -> {
             List<Item> found = new ArrayList<>();
             String st = "";
-            Map<String, String> apps = installedRecApps();
-            recApps = apps;
-            if (apps.isEmpty()) {
-                st = "Install Nuvio, LokLok, Viu, CineFlow or CloudStream";
-            } else {
-                // 1) rows the apps publish themselves (needs READ_EPG_DATA; silently skipped without it)
-                try {
-                    if (ctx.checkSelfPermission("com.android.providers.tv.permission.READ_EPG_DATA")
-                            == PackageManager.PERMISSION_GRANTED) {
-                        found = query();
-                    }
-                } catch (Exception e) {
-                    android.util.Log.w("TvHome", "watch query failed", e);
-                }
-                // 2) top up with this week's trending on TMDB; a tile opens one of those apps
-                if (found.size() < MAX_ITEMS) {
+            try {
+                Map<String, String> src = installedSources();
+                if (src.isEmpty()) {
+                    st = "Install LokTV, Nuvio, Viu, CineFlow, IDLIX, Bilibili, YouTube or CloudStream to get recommendations";
+                } else {
                     try {
-                        List<Item> web = online(apps);
-                        for (Item it : web) {
-                            if (found.size() >= MAX_ITEMS) break;
-                            found.add(it);
-                        }
+                        found.addAll(query(new HashSet<>(src.values())));
                     } catch (Exception e) {
-                        android.util.Log.w("TvHome", "tmdb failed", e);
+                        android.util.Log.w("TvHome", "preview query failed", e); // no permission: just skip
+                    }
+                    if (found.size() < MAX_ITEMS) {
+                        try {
+                            for (Item w : tmdbPicks(src)) {
+                                if (found.size() >= MAX_ITEMS) break;
+                                found.add(w);
+                            }
+                        } catch (Exception e) {
+                            android.util.Log.w("TvHome", "tmdb failed", e);
+                        }
                     }
                 }
-                if (found.isEmpty()) st = "No recommendations yet (needs internet)";
+            } catch (Exception e) {
+                android.util.Log.w("TvHome", "recommend failed", e);
             }
             List<Item> done = found;
             String doneStatus = st;
             main.post(() -> {
                 fetching = false;
                 status = doneStatus;
+                if (done.isEmpty()) lastFetch = System.currentTimeMillis() - MIN_GAP_MS + 60_000L; // retry in 1 min
                 apply(done);
             });
         });
     }
 
-    /** Installed apps among REC_APPS, found by their launcher name (package names differ per build). */
-    private Map<String, String> installedRecApps() {
-        Map<String, String> out = new LinkedHashMap<>();
+    /** Installed apps among SOURCES: key -> package, in SOURCES order. */
+    private Map<String, String> installedSources() {
         PackageManager pm = ctx.getPackageManager();
-        String[] cats = {Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER};
-        for (String cat : cats) {
-            Intent main = new Intent(Intent.ACTION_MAIN).addCategory(cat);
-            for (ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
+        Map<String, String> out = new LinkedHashMap<>();
+        List<android.content.pm.ResolveInfo> all = new ArrayList<>();
+        all.addAll(pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0));
+        all.addAll(pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0));
+        for (String key : SOURCES) {
+            for (android.content.pm.ResolveInfo ri : all) {
                 String pkg = ri.activityInfo.packageName;
-                if (out.containsKey(pkg) || pkg.equals(ctx.getPackageName())) continue;
-                String label = String.valueOf(ri.loadLabel(pm));
-                String norm = label.toLowerCase(Locale.ROOT).replace(" ", "").replace("-", "");
-                for (String k : REC_APPS) {
-                    if (norm.startsWith(k)) {
-                        out.put(pkg, label);
-                        break;
-                    }
+                String label = String.valueOf(ri.loadLabel(pm)).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+                String p = pkg.toLowerCase(Locale.ROOT);
+                boolean skip = false;
+                for (String sk : SKIP) if (label.contains(sk) || p.contains(sk)) skip = true;
+                if (skip) continue;
+                boolean hit = label.startsWith(key) || (key.equals("viu") ? p.equals("com.vuclip.viu") : key.equals("youtube") ? p.startsWith("com.google.android.youtube") : p.contains(key));
+                if (hit && !pkg.equals(ctx.getPackageName())) {
+                    out.put(key, pkg);
+                    break;
                 }
             }
         }
         return out;
     }
 
-    private List<Item> query() {
+    /** Preview programs that one of our apps publishes to the system TV provider (often none). */
+    private List<Item> query(Set<String> pkgs) {
         List<Item> all = new ArrayList<>();
-        Uri uri = mode == CONTINUE ? WATCH_NEXT : PREVIEW;
+        if (ctx.checkSelfPermission("com.android.providers.tv.permission.READ_EPG_DATA")
+                != PackageManager.PERMISSION_GRANTED) return all;
         Cursor c = null;
         try {
-            try {
-                c = ctx.getContentResolver().query(uri, null, null, null,
-                        mode == CONTINUE ? "last_engagement_time_utc_millis DESC" : null);
-            } catch (IllegalArgumentException badSort) {
-                c = ctx.getContentResolver().query(uri, null, null, null, null);
-            }
+            c = ctx.getContentResolver().query(PREVIEW, null, null, null, null);
             if (c == null) return all;
             int iTitle = c.getColumnIndex("title"), iPkg = c.getColumnIndex("package_name"),
                     iIntent = c.getColumnIndex("intent_uri"), iPoster = c.getColumnIndex("poster_art_uri"),
                     iThumb = c.getColumnIndex("thumbnail_uri"), iType = c.getColumnIndex("type"),
-                    iGenre = c.getColumnIndex("canonical_genre"), iDur = c.getColumnIndex("duration_millis"),
-                    iPos = c.getColumnIndex("last_playback_position_millis"),
-                    iSeason = c.getColumnIndex("season_display_number"),
-                    iEp = c.getColumnIndex("episode_display_number"),
-                    iWn = c.getColumnIndex("watch_next_type");
-            boolean anyContinueType = false;
-            List<Item> typed = new ArrayList<>();
-            List<Boolean> isContinue = new ArrayList<>();
-            while (c.moveToNext() && all.size() + typed.size() < 80) {
+                    iGenre = c.getColumnIndex("canonical_genre"), iDur = c.getColumnIndex("duration_millis");
+            while (c.moveToNext() && all.size() < 80) {
                 String pkg = str(c, iPkg), title = str(c, iTitle);
-                if (pkg == null || title == null || pkg.equals(ctx.getPackageName())) continue;
-                if (mode == RECOMMEND && !recApps.containsKey(pkg)) continue;
+                if (pkg == null || title == null || !pkgs.contains(pkg)) continue;
                 Item it = new Item();
                 it.pkg = pkg;
                 it.title = title;
                 it.intentUri = str(c, iIntent);
                 String thumb = str(c, iThumb);
                 it.art = thumb != null ? thumb : str(c, iPoster);
-                long dur = lng(c, iDur), pos = lng(c, iPos);
-                String app = appLabel(pkg);
-                if (mode == CONTINUE) {
-                    if (dur > 0 && pos > 0) {
-                        it.progress = Math.min(1f, (float) pos / dur);
-                        it.meta = app + " · " + left(dur - pos);
-                    } else {
-                        it.meta = app;
-                    }
-                    String s = str(c, iSeason), e = str(c, iEp);
-                    if (s != null && e != null) it.title = title + " · S" + s + " E" + e;
-                    boolean cont = iWn < 0 || c.isNull(iWn) || c.getInt(iWn) == 0;
-                    anyContinueType |= cont;
-                    isContinue.add(cont);
-                    typed.add(it);
-                } else {
-                    List<String> parts = new ArrayList<>();
-                    int type = iType >= 0 && !c.isNull(iType) ? c.getInt(iType) : -1;
-                    if (type >= 0 && type < TYPES.length) parts.add(TYPES[type]);
-                    String genre = str(c, iGenre);
-                    if (genre != null) parts.add(genre.split(",")[0].trim());
-                    if (dur > 0) parts.add(length(dur));
-                    parts.add(app);
-                    it.meta = join(parts);
-                    all.add(it);
-                }
-            }
-            if (mode == CONTINUE) {
-                for (int i = 0; i < typed.size(); i++) {
-                    if (!anyContinueType || isContinue.get(i)) all.add(typed.get(i));
-                }
+                List<String> parts = new ArrayList<>();
+                int type = iType >= 0 && !c.isNull(iType) ? c.getInt(iType) : -1;
+                if (type >= 0 && type < TYPES.length) parts.add(TYPES[type]);
+                String genre = str(c, iGenre);
+                if (genre != null) parts.add(genre.split(",")[0].trim());
+                long dur = lng(c, iDur);
+                if (dur > 0) parts.add(length(dur));
+                parts.add(appLabel(pkg));
+                it.meta = join(parts);
+                all.add(it);
             }
         } finally {
             if (c != null) c.close();
@@ -354,31 +337,7 @@ final class WatchPanel {
         return onePerApp(all);
     }
 
-    // ---------------------------------------------------------------- internet sources
-
-    /** This week's trending on TMDB, kept for 30 minutes (per set of installed apps). */
-    private List<Item> online(Map<String, String> apps) {
-        long now = System.currentTimeMillis();
-        String key = apps.keySet().toString();
-        synchronized (webCache) {
-            if (!webCache.isEmpty() && key.equals(webKey) && now - lastWeb < 30 * 60_000L) return new ArrayList<>(webCache);
-        }
-        List<Item> out = new ArrayList<>();
-        try {
-            out = tmdbTrending(apps);
-        } catch (Exception e) {
-            android.util.Log.w("TvHome", "tmdb failed", e);
-        }
-        if (!out.isEmpty()) {
-            synchronized (webCache) {
-                webCache.clear();
-                webCache.addAll(out);
-                webKey = key;
-                lastWeb = now;
-            }
-        }
-        return out;
-    }
+    // ---------------------------------------------------------------- TMDB
 
     /** TMDB genre ids (movie and TV) to names; these ids don't change. */
     private static String genreName(int id) {
@@ -418,52 +377,128 @@ final class WatchPanel {
         return v.trim().isEmpty() ? null : v.trim();
     }
 
-    /**
-     * This week's trending movies and series on TMDB. The apps don't expose their catalogs, so
-     * the titles are shared out between the installed apps in turn, and a tile opens its app.
-     */
-    private List<Item> tmdbTrending(Map<String, String> apps) throws Exception {
-        List<Item> out = new ArrayList<>();
-        if (TMDB_KEY.isEmpty() || apps.isEmpty()) return out;
-        List<String> pkgs = new ArrayList<>(apps.keySet());
-        JSONObject trending = new JSONObject(httpText(TMDB + "trending/all/week?api_key=" + TMDB_KEY + "&language=en-US"));
-        JSONArray res = trending.optJSONArray("results");
-        for (int i = 0; res != null && i < res.length() && out.size() < MAX_ITEMS; i++) {
-            JSONObject o = res.optJSONObject(i);
-            if (o == null) continue;
-            String mt = o.optString("media_type", "");
-            boolean tv = mt.equals("tv");
-            if (!tv && !mt.equals("movie")) continue;
-            String title = text(o, tv ? "name" : "title");
-            String art = text(o, "backdrop_path");
-            if (art == null) art = text(o, "poster_path");
-            if (title == null || art == null) continue;
-
-            String pkg = pkgs.get(out.size() % pkgs.size());
-            List<String> parts = new ArrayList<>();
-            parts.add(tv ? "Series" : "Movie");
-            JSONArray ids = o.optJSONArray("genre_ids");
-            String genre = ids != null && ids.length() > 0 ? genreName(ids.optInt(0)) : null;
-            if (genre != null) parts.add(genre);
-            String date = text(o, tv ? "first_air_date" : "release_date");
-            if (date != null && date.length() >= 4) parts.add(date.substring(0, 4));
-            parts.add(apps.get(pkg));
-
-            Item it = new Item();
-            it.title = title;
-            it.meta = join(parts);
-            it.pkg = pkg;
-            it.art = TMDB_IMG + art;
-            it.web = true;
-            it.src = "TMDB";
-            out.add(it);
-        }
-        return out;
+    /** Random page 1..max, so each fetch brings different titles. */
+    private static int page(int max) {
+        return 1 + new java.util.Random().nextInt(max);
     }
 
-    private boolean isInstalled(String pkg) {
-        PackageManager pm = ctx.getPackageManager();
-        return pm.getLaunchIntentForPackage(pkg) != null || pm.getLeanbackLaunchIntentForPackage(pkg) != null;
+    /** Adds the titles of one TMDB list to the pool (no duplicates). */
+    private void collect(String path, String defType, List<Item> into, Set<String> seen) {
+        try {
+            JSONObject root = new JSONObject(httpText(TMDB + path + (path.contains("?") ? "&" : "?")
+                    + "api_key=" + TMDB_KEY + "&language=en-US"));
+            JSONArray res = root.optJSONArray("results");
+            for (int i = 0; res != null && i < res.length(); i++) {
+                JSONObject o = res.optJSONObject(i);
+                if (o == null) continue;
+                String mt = o.optString("media_type", defType);
+                boolean tv = mt.equals("tv");
+                if (!tv && !mt.equals("movie")) continue;
+                String title = text(o, tv ? "name" : "title");
+                String art = text(o, "backdrop_path");
+                if (art == null) art = text(o, "poster_path");
+                if (title == null || art == null || !seen.add(mt + o.optInt("id"))) continue;
+                List<String> parts = new ArrayList<>();
+                parts.add(tv ? "Series" : "Movie");
+                JSONArray ids = o.optJSONArray("genre_ids");
+                String genre = ids != null && ids.length() > 0 ? genreName(ids.optInt(0)) : null;
+                if (genre != null) parts.add(genre);
+                String date = text(o, tv ? "first_air_date" : "release_date");
+                if (date != null && date.length() >= 4) parts.add(date.substring(0, 4));
+                Item it = new Item();
+                it.title = title;
+                it.base = join(parts);
+                it.art = TMDB_IMG + art;
+                it.web = true;
+                it.src = "TMDB";
+                it.tv = tv;
+                it.asian = ASIAN.contains(o.optString("original_language", ""));
+                boolean animation = false;
+                for (int k = 0; ids != null && k < ids.length(); k++) if (ids.optInt(k) == 16) animation = true;
+                it.anime = animation || o.optString("original_language", "").equals("ja");
+                into.add(it);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("TvHome", "tmdb " + path + " failed", e);
+        }
+    }
+
+    /** A big, mixed pool (trending, popular, top rated; movies and series; random pages); kept 3 hours. */
+    private void fillPool() {
+        long now = System.currentTimeMillis();
+        synchronized (pool) {
+            if (!pool.isEmpty() && now - poolAt < 3 * 3600_000L) return;
+        }
+        List<Item> fresh = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        collect("trending/all/week?page=" + page(3), "movie", fresh, seen);
+        collect("trending/all/day", "movie", fresh, seen);
+        collect("movie/popular?page=" + page(8), "movie", fresh, seen);
+        collect("tv/popular?page=" + page(8), "tv", fresh, seen);
+        collect("movie/top_rated?page=" + page(8), "movie", fresh, seen);
+        collect("tv/top_rated?page=" + page(8), "tv", fresh, seen);
+        collect("discover/tv?sort_by=popularity.desc&with_original_language=ko&page=" + page(4), "tv", fresh, seen);
+        collect("discover/tv?sort_by=popularity.desc&with_original_language=zh&page=" + page(3), "tv", fresh, seen);
+        if (fresh.isEmpty()) return;
+        synchronized (pool) {
+            pool.clear();
+            pool.addAll(fresh);
+            poolAt = now;
+        }
+    }
+
+    /**
+     * A new random selection from the pool on every call, avoiding what was shown last time, and
+     * a mix of movies and series. Each title is given to one of the installed apps (round-robin
+     * inside the group that suits it).
+     */
+    private List<Item> tmdbPicks(Map<String, String> src) throws Exception {
+        List<Item> out = new ArrayList<>();
+        if (TMDB_KEY.isEmpty()) return out;
+        List<String> asianPool = new ArrayList<>(), generalPool = new ArrayList<>();
+        for (String k : new String[] {"loktv", "viu", "idlix", "cineflow", "youtube"}) if (src.containsKey(k)) asianPool.add(src.get(k));
+        for (String k : new String[] {"nuvio", "cloudstream", "idlix", "cineflow", "youtube"}) if (src.containsKey(k)) generalPool.add(src.get(k));
+        String animePkg = src.get("bilibili");
+        if (asianPool.isEmpty()) asianPool = generalPool;
+        if (generalPool.isEmpty()) generalPool = asianPool;
+        if (asianPool.isEmpty() && animePkg == null) return out;
+        if (asianPool.isEmpty()) asianPool = generalPool = java.util.Collections.singletonList(animePkg);
+
+        fillPool();
+        List<Item> cand;
+        synchronized (pool) {
+            cand = new ArrayList<>(pool);
+        }
+        java.util.Collections.shuffle(cand);
+        List<Item> fresh = new ArrayList<>();
+        for (Item c : cand) if (!lastShown.contains(c.title)) fresh.add(c);
+        if (fresh.size() >= MAX_ITEMS) cand = fresh; // not enough new ones: repeats are allowed
+
+        int a = 0, g = 0, movies = 0, series = 0;
+        List<Item> rest = new ArrayList<>();
+        for (Item c : cand) { // first pass keeps movies and series about even
+            if (out.size() >= MAX_ITEMS) break;
+            if (c.tv ? series > movies + 1 : movies > series + 1) { rest.add(c); continue; }
+            if (c.tv) series++; else movies++;
+            out.add(c);
+        }
+        for (Item c : rest) if (out.size() < MAX_ITEMS) out.add(c);
+
+        List<Item> done = new ArrayList<>();
+        for (Item c : out) {
+            Item it = new Item();
+            it.title = c.title;
+            it.art = c.art;
+            it.web = true;
+            it.src = "TMDB";
+            it.pkg = c.anime && animePkg != null ? animePkg
+                    : c.asian ? asianPool.get(a++ % asianPool.size()) : generalPool.get(g++ % generalPool.size());
+            it.meta = c.base + " · " + appLabel(it.pkg);
+            done.add(it);
+        }
+        lastShown.clear();
+        for (Item it : done) lastShown.add(it.title);
+        return done;
     }
 
     private static String httpText(String url) throws Exception {
@@ -527,27 +562,10 @@ final class WatchPanel {
         show();
     }
 
-    /** MainActivity hands over the most used apps; Continue shows them when no app has progress. */
-    void setRecent(List<String> pkgs) {
-        if (mode != CONTINUE || pkgs.equals(recent)) return;
-        recent = new ArrayList<>(pkgs);
-        show();
-    }
-
     private void show() {
         List<Item> list = new ArrayList<>(fetched);
-        if (list.isEmpty() && mode == CONTINUE) {
-            for (String pkg : recent) {
-                Item it = new Item();
-                it.pkg = pkg;
-                it.title = appLabel(pkg);
-                it.meta = "Recently used";
-                it.appTile = true;
-                list.add(it);
-            }
-        }
         StringBuilder sig = new StringBuilder(status);
-        for (Item it : list) sig.append(it.pkg).append(it.title).append(it.progress).append('|');
+        for (Item it : list) sig.append(it.pkg).append(it.title).append('|');
         if (sig.toString().equals(signature)) return;
         signature = sig.toString();
         items.clear();
@@ -564,10 +582,10 @@ final class WatchPanel {
         row.setLayoutParams(new FrameLayout.LayoutParams(
                 n * tileW + (n - 1) * px(GAP_DP), ViewGroup.LayoutParams.MATCH_PARENT));
         countView.setText(items.isEmpty() ? "" : items.get(0).web ? "via " + items.get(0).src
-                : items.size() + (items.size() == 1 ? " app" : " items"));
+                : items.size() + " items");
         if (items.isEmpty()) {
             TextView t = new TextView(ctx);
-            t.setText(!status.isEmpty() ? status : mode == RECOMMEND ? "No recommendations yet (needs internet)" : "Nothing to continue yet");
+            t.setText(!status.isEmpty() ? status : "No recommendations yet (needs internet)");
             t.setTextSize(11f);
             t.setTextColor(DIM_HEADER);
             t.setTypeface(Fonts.outfit(ctx, 400));
@@ -590,7 +608,7 @@ final class WatchPanel {
         FrameLayout card = new FrameLayout(ctx);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0xFF232B32);
-        bg.setCornerRadius(px(9));
+        bg.setCornerRadius(px(11));
         card.setBackground(bg);
         card.setClipToOutline(true);
 
@@ -598,22 +616,7 @@ final class WatchPanel {
         poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
         card.addView(poster, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        if (it.appTile) {
-            try {
-                PackageManager pm = ctx.getPackageManager();
-                android.graphics.drawable.Drawable d = pm.getApplicationBanner(it.pkg);
-                if (d == null) {
-                    d = pm.getApplicationIcon(it.pkg);
-                    poster.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                    poster.setPadding(0, px(6), 0, px(26));
-                }
-                poster.setImageDrawable(d);
-            } catch (Exception ignored) {
-                // no artwork: the dark tile and the name are enough
-            }
-        } else {
-            loadPoster(poster, it.art);
-        }
+        loadPoster(poster, it.art);
 
         View scrim = new View(ctx);
         GradientDrawable sg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -624,7 +627,7 @@ final class WatchPanel {
 
         LinearLayout col = new LinearLayout(ctx);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(px(7), 0, px(7), px(it.progress >= 0 ? 9 : 6));
+        col.setPadding(px(7), 0, px(7), px(6));
         TextView meta = new TextView(ctx);
         meta.setText(it.meta);
         meta.setTextSize(9f);
@@ -649,16 +652,6 @@ final class WatchPanel {
         card.addView(col, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
-        if (it.progress >= 0) {
-            FrameLayout track = new FrameLayout(ctx);
-            track.setBackgroundColor(0x55FFFFFF);
-            View fill = new View(ctx);
-            fill.setBackgroundColor(0xFFE24B4A);
-            int w = Math.max(px(3), Math.round(tileW * it.progress));
-            track.addView(fill, new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT));
-            card.addView(track, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, px(3), Gravity.BOTTOM));
-        }
         return card;
     }
 
@@ -749,10 +742,6 @@ final class WatchPanel {
     private static String length(long ms) {
         long m = ms / 60_000;
         return m >= 60 ? (m / 60) + "h " + (m % 60) + "m" : m + "m";
-    }
-
-    private static String left(long ms) {
-        return length(Math.max(60_000, ms)) + " left";
     }
 
     private int px(float dps) {

@@ -1,6 +1,8 @@
 package my.rafhan.app.tvhome;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -15,15 +17,20 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Screensaver: jam besar di kiri, tarikh dan Hijri di bawahnya, kemudian satu baris
+ * Screensaver: latar gambar Bing yang bertukar-tukar, jam besar di kiri, tarikh dan Hijri di bawahnya, kemudian satu baris
  * "♪ Penyanyi · Tajuk lagu" tanpa kotak (kalau ada lagu atau radio yang sedang main).
  * Anti burn-in: semuanya beralih sedikit setiap 2 minit, malap lagi selepas 10 minit.
  * Keluar: tekan mana-mana butang atau sentuh.
@@ -48,6 +55,15 @@ public class ScreensaverActivity extends Activity {
     private View dimOverlay;
     private int shiftIdx = 0;
     private boolean polling;
+
+    // ---- Latar: gambar Bing yang bertukar, dua lapisan untuk fade silang ----
+    private ImageView bgA, bgB;
+    private boolean frontA = true;
+    private int picIdx;
+    private long lastBingTry;
+    private static final long BG_MS = 45_000;
+    private static final float SCRIM_NORMAL = 0.55f;
+    private final ExecutorService bgWorker = Executors.newSingleThreadExecutor();
     private long created;
     private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private final SimpleDateFormat dateFmt =
@@ -77,6 +93,13 @@ public class ScreensaverActivity extends Activity {
         }
     };
 
+    private final Runnable bgTask = new Runnable() {
+        @Override public void run() {
+            nextBackground();
+            h.postDelayed(this, BG_MS);
+        }
+    };
+
     private final Runnable dimTask = new Runnable() {
         @Override public void run() {
             dimOverlay.animate().alpha(0.45f).setDuration(2000).start();
@@ -96,6 +119,21 @@ public class ScreensaverActivity extends Activity {
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#0B0F14"));
+
+        // Latar: gambar Bing, dua lapisan untuk fade silang, digelapkan supaya jam jelas.
+        bgA = new ImageView(this);
+        bgB = new ImageView(this);
+        for (ImageView v : new ImageView[] {bgA, bgB}) {
+            v.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            v.setAlpha(0f);
+            root.addView(v, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        View scrim = new View(this);
+        scrim.setBackgroundColor(Color.BLACK);
+        scrim.setAlpha(SCRIM_NORMAL);
+        root.addView(scrim, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
         // Satu blok di kiri: jam, tarikh, Hijri, kemudian baris lagu.
         LinearLayout box = new LinearLayout(this);
@@ -169,6 +207,7 @@ public class ScreensaverActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         h.post(tick);
+        h.post(bgTask);
         h.postDelayed(pollTask, POLL_MS);
         h.postDelayed(shiftTask, 120_000);
         h.postDelayed(dimTask, 600_000);
@@ -187,6 +226,7 @@ public class ScreensaverActivity extends Activity {
     @Override protected void onDestroy() {
         super.onDestroy();
         cover = null;
+        bgWorker.shutdownNow();
     }
 
     // ---- Keluar: mana-mana butang / sentuhan ----
@@ -200,6 +240,51 @@ public class ScreensaverActivity extends Activity {
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (e.getAction() == MotionEvent.ACTION_DOWN) finish();
         return true;
+    }
+
+    // ================================================================ Latar Bing
+
+    /** Muat gambar Bing seterusnya di thread latar (muat turun dulu kalau belum ada / sudah tiba masa). */
+    private void nextBackground() {
+        bgWorker.execute(() -> {
+            long now = SystemClock.elapsedRealtime();
+            boolean tryNet = Bing.due(this) && (lastBingTry == 0 || now - lastBingTry > 10 * 60_000L);
+            if (tryNet) {
+                lastBingTry = now;
+                Bing.refresh(this);
+            }
+            List<File> pics = Bing.pictures(this);
+            if (pics.isEmpty()) return;
+            File f = pics.get(Math.floorMod(picIdx++, pics.size()));
+            Bitmap b = decode(f, 1280);
+            if (b != null) h.post(() -> showBackground(b));
+        });
+    }
+
+    private static Bitmap decode(File f, int targetW) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(f.getPath(), o);
+        if (o.outWidth <= 0) return null;
+        int sample = 1;
+        while (o.outWidth / (sample * 2) >= targetW) sample *= 2;
+        o.inJustDecodeBounds = false;
+        o.inSampleSize = sample;
+        o.inPreferredConfig = Bitmap.Config.RGB_565;
+        return BitmapFactory.decodeFile(f.getPath(), o);
+    }
+
+    /** Fade silang: gambar baru masuk di lapisan belakang, lapisan depan pudar. */
+    private void showBackground(Bitmap b) {
+        if (isFinishing() || isDestroyed()) return;
+        ImageView front = frontA ? bgA : bgB, back = frontA ? bgB : bgA;
+        back.setImageBitmap(b);
+        back.setAlpha(0f);
+        back.animate().alpha(1f).setDuration(1500).start();
+        if (front.getDrawable() != null) {
+            front.animate().alpha(0f).setDuration(1500).withEndAction(() -> front.setImageDrawable(null)).start();
+        }
+        frontA = !frontA;
     }
 
     private void pollSession() {

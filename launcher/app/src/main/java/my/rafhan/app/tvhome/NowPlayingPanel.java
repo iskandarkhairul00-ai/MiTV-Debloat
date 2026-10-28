@@ -56,10 +56,8 @@ import java.util.regex.Pattern;
  * media keys.
  */
 final class NowPlayingPanel {
-    /** Susunan butang kiri ke kanan: mod main, sebelumnya, main/jeda, seterusnya, buka app. */
-    static final int MODE = 0, PREV = 1, PLAY_PAUSE = 2, NEXT = 3, OPEN = 4, BUTTONS = 5;
-    /** Mod main: 0 = ikut turutan (loop playlist), 1 = random, 2 = ulang lagu sama. */
-    private static final int MODE_COUNT = 3;
+    /** Susunan butang kiri ke kanan: sebelumnya, main/jeda, seterusnya. */
+    static final int PREV = 0, PLAY_PAUSE = 1, NEXT = 2, BUTTONS = 3;
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, LIVE = 0xFFFF5A52;
     /** Cover is a square this size, and sets the card's height. */
     private static final int COVER = 88;
@@ -95,7 +93,7 @@ final class NowPlayingPanel {
     private final Bar bar;
     private final ImageView[] buttons = new ImageView[BUTTONS];
 
-    private int mode;
+    private boolean enabled; // kad dipaparkan (walaupun tiada lagu: keadaan "Nothing playing")
     private Info info;
     private boolean started, shown, visibleOnScreen = true;
     private volatile AdbKeys.Hid helper;
@@ -166,11 +164,11 @@ final class NowPlayingPanel {
 
         source = text(9.5f, 500, DIM);
         source.setLetterSpacing(0.08f);
-        col.addView(source);
-        title = text(15f, 500, TEXT);
-        col.addView(title, top(3));
-        artist = text(12f, 400, 0xB3FFFFFF);
-        col.addView(artist, top(2));
+        // Hanya tajuk lagu dan nama penyanyi: tiada label app, garisan kemajuan atau masa.
+        title = text(16f, 500, TEXT);
+        col.addView(title, top(0));
+        artist = text(13f, 400, 0xB3FFFFFF);
+        col.addView(artist, top(3));
 
         LinearLayout progress = new LinearLayout(ctx);
         progress.setGravity(Gravity.CENTER_VERTICAL);
@@ -179,19 +177,17 @@ final class NowPlayingPanel {
         blp.setMarginEnd(px(8));
         progress.addView(bar, blp);
         time = text(9.5f, 500, DIM);
-        progress.addView(time);
-        col.addView(progress, top(6));
+        progress.addView(time); // tak dipaparkan (progress tak dimasukkan ke dalam kad)
 
-        mode = ctx.getSharedPreferences("now_playing", Context.MODE_PRIVATE).getInt("mode", 0) % MODE_COUNT;
-        int[] icons = {modeIcon(), R.drawable.ic_previous, R.drawable.ic_pause, R.drawable.ic_next, R.drawable.ic_open};
+        int[] icons = {R.drawable.ic_previous, R.drawable.ic_pause, R.drawable.ic_next};
         for (int i = 0; i < BUTTONS; i++) {
             ImageView b = new ImageView(ctx);
             b.setImageResource(icons[i]);
             b.setBackgroundResource(R.drawable.np_button);
             b.setScaleType(ImageView.ScaleType.CENTER);
             b.setImageTintList(ColorStateList.valueOf(TEXT));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(32), px(32));
-            if (i > 0) lp.setMarginStart(px(6));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(px(36), px(36));
+            if (i > 0) lp.setMarginStart(px(8));
             card.addView(b, lp);
             buttons[i] = b;
         }
@@ -203,6 +199,9 @@ final class NowPlayingPanel {
         if (started) return;
         started = true;
         generation++;
+        enabled = true;
+        card.setVisibility(View.VISIBLE); // sentiasa ada; "Nothing playing" bila tiada lagu
+        if (info == null) showIdle();
         adb.ensure();
         main.post(dumpsysPoll); // the helper is only started once something is playing
     }
@@ -221,9 +220,10 @@ final class NowPlayingPanel {
     /** Settings → Now Playing card off: stop watching and take the card down. */
     void disable() {
         stop();
+        enabled = false;
+        card.setVisibility(View.GONE);
         if (shown) {
             shown = false;
-            card.setVisibility(View.GONE);
             listener.onShownChanged(false);
         }
     }
@@ -282,23 +282,6 @@ final class NowPlayingPanel {
             case NEXT:
                 media(am, KeyEvent.KEYCODE_MEDIA_NEXT);
                 break;
-            case MODE:
-                mode = (mode + 1) % MODE_COUNT;
-                ctx.getSharedPreferences("now_playing", Context.MODE_PRIVATE).edit().putInt("mode", mode).apply();
-                buttons[MODE].setImageResource(modeIcon());
-                sendMode(mode);
-                return;
-            case OPEN:
-                PackageManager pm = ctx.getPackageManager();
-                Intent launch = pm.getLeanbackLaunchIntentForPackage(in.pkg);
-                if (launch == null) launch = pm.getLaunchIntentForPackage(in.pkg);
-                if (launch != null) {
-                    try {
-                        ctx.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                    } catch (RuntimeException ignored) {
-                    }
-                }
-                return;
             default:
                 return;
         }
@@ -307,19 +290,6 @@ final class NowPlayingPanel {
             main.removeCallbacks(dumpsysPoll);
             main.postDelayed(dumpsysPoll, 600);
         }
-    }
-
-    private int modeIcon() {
-        return mode == 1 ? R.drawable.ic_shuffle : mode == 2 ? R.drawable.ic_repeat_one : R.drawable.ic_repeat;
-    }
-
-    /**
-     * Hantar mod main ke app muzik. Android tiada kekunci media untuk shuffle/repeat, jadi ini
-     * perlu custom action MediaSession (sendCustomAction) melalui MediaHelper. Buat masa ini
-     * hanya ikon yang bertukar; sambungkan di sini bila nama custom action app tu diketahui.
-     */
-    private void sendMode(int mode) {
-        // TODO: hantar custom action (shuffle/repeat) ke sesi app yang sedang main.
     }
 
     private static void media(AudioManager am, int code) {
@@ -519,15 +489,13 @@ final class NowPlayingPanel {
     private void show(Info i) {
         info = i;
         last = i;
-        // Last Watching card on home: remember what each app was last playing.
-        if (i != null) LastWatchPanel.record(ctx, i.pkg, i.title, i.artist);
         main.removeCallbacks(tick);
         if (i == null) {
             coverKey = null;
             helperArt = null;
+            if (enabled) showIdle();
             if (shown) {
                 shown = false;
-                card.setVisibility(View.GONE);
                 listener.onShownChanged(false);
             }
             return;
@@ -552,6 +520,7 @@ final class NowPlayingPanel {
             buttons[PLAY_PAUSE].setImageResource(icon);
         }
         // Bila app laporkan senarai tindakan, malapkan Sebelumnya/Seterusnya yang tak disokong.
+        buttons[PLAY_PAUSE].setAlpha(1f);
         buttons[PREV].setAlpha(supported(i.actions, ACTION_PREV) ? 1f : 0.35f);
         buttons[NEXT].setAlpha(supported(i.actions, ACTION_NEXT) ? 1f : 0.35f);
 
@@ -560,8 +529,26 @@ final class NowPlayingPanel {
             card.setVisibility(View.VISIBLE);
             listener.onShownChanged(true);
         }
+        cover.setImageTintList(null);
         updateProgress();
         if (needsTick()) main.postDelayed(tick, 1000);
+    }
+
+    /** Tiada lagu: kad kekal di skrin, butang dimalapkan. */
+    private void showIdle() {
+        source.setText("NOW PLAYING");
+        title.setText("Nothing playing");
+        artist.setVisibility(View.GONE);
+        int p = px(26);
+        cover.setPadding(p, p, p, p);
+        cover.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        cover.setImageResource(PLAY_ICON);
+        cover.setImageTintList(ColorStateList.valueOf(0x59FFFFFF));
+        bar.set(0f, TEXT);
+        time.setText("");
+        shownIcon = PLAY_ICON;
+        buttons[PLAY_PAUSE].setImageResource(PLAY_ICON);
+        for (ImageView b : buttons) b.setAlpha(0.35f);
     }
 
     private static boolean supported(long actions, long flag) {
@@ -627,7 +614,7 @@ final class NowPlayingPanel {
 
     private boolean needsTick() {
         Info i = info;
-        return shown && visibleOnScreen && i != null && i.state == PlaybackState.STATE_PLAYING;
+        return false; // tiada garisan kemajuan lagi, tak perlu tick setiap saat
     }
 
     private void updateProgress() {
