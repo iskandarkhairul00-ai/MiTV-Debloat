@@ -39,6 +39,7 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -101,7 +102,6 @@ public class MainActivity extends Activity {
     private final Map<String, AppEntry> rendered = new HashMap<>();
     private final List<ImageView> dockTiles = new ArrayList<>();
     private final int[] loc = new int[2];
-    private long lastBackUp = 0;
 
     private void openScreensaver() {
     Intent i = new Intent(this, ScreensaverActivity.class);
@@ -175,6 +175,7 @@ public class MainActivity extends Activity {
     // dock app the chosen app replaces (dock full).
     private static final int EDIT_NONE = 0, EDIT_MOVE = 1, EDIT_REPLACE = 2;
     private int editMode = EDIT_NONE;
+    private boolean moveGrid; // EDIT_MOVE berlaku pada grid (bukan dock)
     private AppEntry replaceWith;
     private String pendingDockFocus; // after a dock change, focus this app in the dock
     private ValueAnimator wiggle;
@@ -650,6 +651,7 @@ public class MainActivity extends Activity {
     /** Most used first (last 7 days); apps with no recorded use stay A-Z. List.sort is stable. */
     private void sortByUsage(List<AppEntry> list) {
         AppOrder.apply(this, list);
+        GridOrder.apply(this, list); // susunan manual (kalau ada) menang
     }
 
     /** On every return home: re-rank the grid and refresh the card, keeping focus on the same app. */
@@ -1080,9 +1082,6 @@ public class MainActivity extends Activity {
                 } else if (armedKey == code) {
                     armedKey = KeyEvent.KEYCODE_UNKNOWN;
                     if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE) {
-                        long now = SystemClock.uptimeMillis();
-                        if (now - lastBackUp < 400) { lastBackUp = 0; openScreensaver(); return true; }
-                        lastBackUp = now;
                         onBack();
                     } else onSelect();
                 }
@@ -1093,6 +1092,10 @@ public class MainActivity extends Activity {
     }
 
     private void onUp() {
+        if (editMode == EDIT_MOVE && moveGrid) {
+            shiftGridApp(-COLS);
+            return;
+        }
         if (editMode != EDIT_NONE) return; // finish (OK) or cancel (Back) first
         if (section == SETTINGS) {
             settingsScreen.up();
@@ -1132,6 +1135,10 @@ public class MainActivity extends Activity {
     }
 
     private void onDown() {
+        if (editMode == EDIT_MOVE && moveGrid) {
+            shiftGridApp(COLS);
+            return;
+        }
         if (editMode != EDIT_NONE) return;
         if (section == SETTINGS) {
             settingsScreen.down();
@@ -1177,7 +1184,8 @@ public class MainActivity extends Activity {
             return;
         }
         if (editMode == EDIT_MOVE) {
-            shiftDockApp(dir);
+            if (moveGrid) shiftGridApp(dir);
+            else shiftDockApp(dir);
             return;
         }
         switch (section) {
@@ -1376,15 +1384,24 @@ public class MainActivity extends Activity {
                 d.remove(e.pkg);
                 DockConfig.save(this, d);
             }));
-        } else if (dock.size() < DOCK_SIZE) {
-            items.add(new MenuItem("Add to dock", () -> {
-                pendingDockFocus = e.pkg;
-                List<String> d = dockPkgs();
-                d.add(e.pkg);
-                DockConfig.save(this, d);
-            }));
         } else {
-            items.add(new MenuItem("Replace a dock app…", () -> startReplace(e)));
+            if (dock.size() < DOCK_SIZE) {
+                items.add(new MenuItem("Add to dock", () -> {
+                    pendingDockFocus = e.pkg;
+                    List<String> d = dockPkgs();
+                    d.add(e.pkg);
+                    DockConfig.save(this, d);
+                }));
+            } else {
+                items.add(new MenuItem("Replace a dock app…", () -> startReplace(e)));
+            }
+            if (apps.size() > 1) items.add(new MenuItem("Move", this::startGridMove));
+            if (GridOrder.has(this)) {
+                items.add(new MenuItem("Sort by usage again", () -> {
+                    GridOrder.clear(this);
+                    loadApps(); // muat semula: grid kembali ikut penggunaan
+                }));
+            }
         }
         items.add(new MenuItem("Open " + e.label, () -> launch(e)));
 
@@ -1586,12 +1603,63 @@ public class MainActivity extends Activity {
     }
 
     private void finishMove() {
+        if (moveGrid) {
+            finishGridMove();
+            return;
+        }
         editMode = EDIT_NONE;
         stopWiggle();
         List<String> order = dockPkgs();
         if (dockIdx < dock.size()) pendingDockFocus = dock.get(dockIdx).pkg;
         DockConfig.save(this, order); // reloads through dockChanged
         updateHero(true);
+    }
+
+    /** Hold OK on a grid app -> Move: arrows swap it with its neighbour, OK / Back saves the order. */
+    private void startGridMove() {
+        if (gridIdx >= apps.size() || apps.size() < 2) return;
+        editMode = EDIT_MOVE;
+        moveGrid = true;
+        Toast.makeText(this, "Move: \u25c0 \u25b6 \u25b2 \u25bc, OK to place", Toast.LENGTH_SHORT).show();
+        afterGridLayout(() -> startWiggle(focusedGridTile()));
+    }
+
+    /** Swaps the moving grid app with the one `step` places away (+-1 sideways, +-COLS up/down). */
+    private void shiftGridApp(int step) {
+        int to = gridIdx + step;
+        if (to < 0 || to >= apps.size()) return;
+        if (Math.abs(step) == 1 && to / COLS != gridIdx / COLS) return; // sideways stays in its row
+        Collections.swap(apps, gridIdx, to);
+        stopWiggle();
+        gridIdx = to;
+        adapter.notifyDataSetChanged();
+        afterGridLayout(() -> {
+            moveFocus(GRID, to);
+            startWiggle(focusedGridTile());
+        });
+    }
+
+    private void finishGridMove() {
+        editMode = EDIT_NONE;
+        moveGrid = false;
+        stopWiggle();
+        List<String> order = new ArrayList<>();
+        for (AppEntry a : apps) order.add(a.pkg);
+        GridOrder.save(this, order);
+        adapter.notifyDataSetChanged();
+        afterGridLayout(() -> moveFocus(GRID, gridIdx));
+    }
+
+    /** Runs once after the grid's next layout pass (the tiles have their new positions by then). */
+    private void afterGridLayout(Runnable r) {
+        grid.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                grid.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                r.run();
+            }
+        });
+        grid.requestLayout();
     }
 
     private void startReplace(AppEntry e) {

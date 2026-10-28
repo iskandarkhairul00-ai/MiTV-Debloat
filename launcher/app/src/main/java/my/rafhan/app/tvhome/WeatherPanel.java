@@ -32,8 +32,8 @@ import java.util.concurrent.Executor;
  * the clock's minute tick like PrayerPanel.
  */
 final class WeatherPanel {
-    // Selangor. Change these two numbers for another place.
-    private static final double LAT = 3.07, LON = 101.52;
+    // Flat Taman Putra Damai (Lembah Subang 1), Petaling Jaya. Change these two numbers for another place.
+    private static final double LAT = 3.1148, LON = 101.5879;
     private static final String API = "https://api.open-meteo.com/v1/forecast?latitude=" + LAT
             + "&longitude=" + LON + "&current=temperature_2m,weather_code"
             + "&hourly=temperature_2m,weather_code&forecast_days=3&timezone=auto";
@@ -126,7 +126,7 @@ final class WeatherPanel {
     static String category(Context ctx) {
         int code = lastCode;
         if (code < 0) {
-            JSONObject d = read(new File(ctx.getFilesDir(), "weather.json"));
+            JSONObject d = read(new File(ctx.getFilesDir(), "weather_" + LAT + "_" + LON + ".json"));
             if (d != null) code = d.optJSONObject("current") == null ? -1
                     : d.optJSONObject("current").optInt("weather_code", -1);
             lastCode = code;
@@ -201,7 +201,8 @@ final class WeatherPanel {
     // ---------------------------------------------------------------- data
 
     private File cacheFile() {
-        return new File(ctx.getFilesDir(), "weather.json");
+        // Nama fail ikut koordinat: tukar tempat tak akan tunjuk cuaca lama dari tempat sebelumnya.
+        return new File(ctx.getFilesDir(), "weather_" + LAT + "_" + LON + ".json");
     }
 
     private long cacheAge() {

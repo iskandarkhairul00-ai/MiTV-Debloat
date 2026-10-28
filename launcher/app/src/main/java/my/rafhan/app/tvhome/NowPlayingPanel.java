@@ -436,6 +436,10 @@ final class NowPlayingPanel {
         int bestRank = 0;
         try {
             Process p = new ProcessBuilder("dumpsys", "media_session").redirectErrorStream(true).start();
+            // Jangan biar dumpsys yang tergantung menyekat bacaan selama-lamanya.
+            final Handler watchdog = new Handler(Looper.getMainLooper());
+            final Runnable kill = p::destroy;
+            watchdog.postDelayed(kill, 5000);
             try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                 Info cur = null;
                 boolean inStack = false;
@@ -477,6 +481,7 @@ final class NowPlayingPanel {
                     }
                 }
             }
+            watchdog.removeCallbacks(kill);
             p.destroy();
         } catch (Exception ignored) {
         }

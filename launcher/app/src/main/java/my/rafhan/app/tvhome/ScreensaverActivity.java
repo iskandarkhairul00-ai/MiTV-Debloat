@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Screensaver: latar gambar Bing yang bertukar-tukar, jam besar di kiri, tarikh dan Hijri di bawahnya, kemudian satu baris
@@ -46,7 +47,7 @@ public class ScreensaverActivity extends Activity {
     public static Drawable cover;
 
     private static final int[][] SHIFTS = {{0, 0}, {3, 2}, {-3, -2}, {2, -3}};
-    private static final long POLL_MS = 8000;
+    private static final long POLL_MS = 3000;
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private TextView clock;
@@ -54,7 +55,8 @@ public class ScreensaverActivity extends Activity {
     private View block;
     private View dimOverlay;
     private int shiftIdx = 0;
-    private boolean polling;
+    // AtomicBoolean: dilepaskan dalam thread bacaan sendiri, bukan melalui Handler (yang dikosongkan bila onPause).
+    private final AtomicBoolean polling = new AtomicBoolean(false);
 
     // ---- Latar: gambar Bing yang bertukar, dua lapisan untuk fade silang ----
     private ImageView bgA, bgB;
@@ -206,16 +208,25 @@ public class ScreensaverActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        stopTasks(); // elak tugasan berganda kalau onResume dipanggil berulang
         h.post(tick);
         h.post(bgTask);
-        h.postDelayed(pollTask, POLL_MS);
+        h.postDelayed(pollTask, 1500); // baca lagu awal; kemudian setiap POLL_MS
         h.postDelayed(shiftTask, 120_000);
         h.postDelayed(dimTask, 600_000);
     }
 
     @Override protected void onPause() {
         super.onPause();
-        h.removeCallbacksAndMessages(null);
+        stopTasks();
+    }
+
+    private void stopTasks() {
+        h.removeCallbacks(tick);
+        h.removeCallbacks(bgTask);
+        h.removeCallbacks(pollTask);
+        h.removeCallbacks(shiftTask);
+        h.removeCallbacks(dimTask);
     }
 
     /** Tekan Home: keluar dari screensaver juga. */
@@ -288,16 +299,22 @@ public class ScreensaverActivity extends Activity {
     }
 
     private void pollSession() {
-        if (polling) return;
-        polling = true;
+        if (!polling.compareAndSet(false, true)) return;
         final android.content.Context ctx = getApplicationContext();
         new Thread(() -> {
-            NowPlayingPanel.Info i = NowPlayingPanel.readSession(ctx);
+            NowPlayingPanel.Info i = null;
+            try {
+                i = NowPlayingPanel.readSession(ctx);
+            } catch (Throwable ignored) {
+            } finally {
+                polling.set(false); // sentiasa dilepaskan, walau apa pun berlaku
+            }
+            final NowPlayingPanel.Info result = i;
+            android.util.Log.d("SS", "poll: " + (result == null ? "null" : result.artist + " | " + result.title));
             h.post(() -> {
-                polling = false;
-                if (isFinishing()) return;
-                if (i == null) showSong(null, null);
-                else showSong(i.title, i.artist);
+                if (isFinishing() || isDestroyed()) return;
+                if (result == null) showSong(null, null);
+                else showSong(result.title, result.artist);
             });
         }, "ss-song-poll").start();
     }
