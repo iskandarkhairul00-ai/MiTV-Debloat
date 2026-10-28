@@ -104,6 +104,9 @@ final class NowPlayingPanel {
     private String coverKey;
     private Bitmap helperArt;
     private int helperArtId;
+    // Cover yang dimuat turun dari artUri (bila app tak hantar bitmap terus).
+    private Bitmap uriArt;
+    private String uriArtUri, uriArtFetching, uriArtFailed;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -399,6 +402,7 @@ final class NowPlayingPanel {
                         helperArtId = fi.artId;
                     }
                     show(fi);
+                    if (fart == null && fi != null) maybeFetchArt(fi, gen);
                     if (fi == null) stopHelper(); // playback ended: free the helper
                 });
             }
@@ -420,6 +424,70 @@ final class NowPlayingPanel {
         if (h != null) new Thread(() -> adb.stop(h), "media-helper-stop").start();
         main.removeCallbacks(dumpsysPoll);
         if (started) main.post(dumpsysPoll);
+    }
+
+    /** App tak hantar bitmap tetapi ada artUri (URL/content://): muat turun sekali, di thread lain. */
+    private void maybeFetchArt(Info i, int gen) {
+        final String uri = i.artUri;
+        if (TextUtils.isEmpty(uri) || uri.equals("null")) return;
+        if (uri.equals(uriArtUri) || uri.equals(uriArtFetching) || uri.equals(uriArtFailed)) return;
+        uriArtFetching = uri;
+        Thread t = new Thread(() -> {
+            Bitmap b = loadArt(uri);
+            main.post(() -> {
+                if (uri.equals(uriArtFetching)) uriArtFetching = null;
+                if (gen != generation) return;
+                if (b == null) {
+                    uriArtFailed = uri; // jangan cuba lagi setiap saat
+                    return;
+                }
+                uriArt = b;
+                uriArtUri = uri;
+                if (info != null) {
+                    coverKey = null; // paksa lukis semula
+                    setCover(info);
+                }
+            });
+        }, "media-art-fetch");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Blocking. Muat turun dan kecilkan (TV RAM rendah). */
+    private Bitmap loadArt(String uri) {
+        HttpURLConnection c = null;
+        InputStream in = null;
+        try {
+            if (uri.startsWith("http")) {
+                c = (HttpURLConnection) new URL(uri).openConnection();
+                c.setConnectTimeout(5000);
+                c.setReadTimeout(8000);
+                in = c.getInputStream();
+            } else {
+                in = ctx.getContentResolver().openInputStream(android.net.Uri.parse(uri));
+            }
+            if (in == null) return null;
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            for (int n; (n = in.read(buf)) > 0 && bos.size() < 4_000_000; ) bos.write(buf, 0, n);
+            byte[] d = bos.toByteArray();
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(d, 0, d.length, o);
+            int target = px(COVER) * 2, s = 1;
+            while (o.outWidth / (s * 2) >= target && o.outHeight / (s * 2) >= target) s *= 2;
+            o.inJustDecodeBounds = false;
+            o.inSampleSize = s;
+            return BitmapFactory.decodeByteArray(d, 0, d.length, o);
+        } catch (Throwable e) {
+            return null;
+        } finally {
+            try {
+                if (in != null) in.close();
+            } catch (Exception ignored) {
+            }
+            if (c != null) c.disconnect();
+        }
     }
 
     // ---------------------------------------------------------------- source 2: dumpsys
@@ -532,6 +600,9 @@ final class NowPlayingPanel {
         if (i == null) {
             coverKey = null;
             helperArt = null;
+            uriArt = null;
+            uriArtUri = null;
+            uriArtFailed = null;
             if (enabled) showIdle();
             if (shown) {
                 shown = false;
@@ -610,6 +681,10 @@ final class NowPlayingPanel {
     private void setCover(Info i) {
         Bitmap art = helper != null && helperArt != null && helperArtId == i.artId ? helperArt : null;
         String key = art != null ? "art:" + i.artId + ":" + i.pkg : "app:" + i.pkg;
+        if (art == null && uriArt != null && uriArtUri != null && uriArtUri.equals(i.artUri)) {
+            art = uriArt;
+            key = "uri:" + i.artUri;
+        }
         if (key.equals(coverKey)) return;
         coverKey = key;
         if (art != null) {
