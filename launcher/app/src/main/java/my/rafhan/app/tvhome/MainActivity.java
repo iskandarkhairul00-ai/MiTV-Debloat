@@ -132,8 +132,8 @@ public class MainActivity extends Activity {
     private PrayerPanel prayer;
     private WeatherPanel weather;
     private UsagePanel usage;
-    // Bottom card: Recommend watching, full width, built in code.
-    private WatchPanel recPanel;
+    // Bottom card: Last watching (recent streaming apps), full width, built in code.
+    private LastWatchPanel recPanel;
     private LinearLayout recCard;
     private int recIdx;
     private Map<String, Long> usageScores = new HashMap<>();
@@ -310,7 +310,7 @@ public class MainActivity extends Activity {
         weather = new WeatherPanel(this, findViewById(R.id.weatherPanel), worker);
         usage = new UsagePanel(this, findViewById(R.id.usagePanel));
         recCard = newWatchCard(Gravity.TOP | Gravity.START, px(64));
-        recPanel = new WatchPanel(this, recCard, WatchPanel.RECOMMEND);
+        recPanel = new LastWatchPanel(this, recCard);
         alignSystemPanel();
         centreDatesOnClock();
 
@@ -963,7 +963,7 @@ public class MainActivity extends Activity {
                 break;
             case REC:
                 v = recPanel.cardAt(recIdx);
-                radius = px(9);
+                radius = px(11);
                 break;
             case UP:
                 v = up.row(upIdx);

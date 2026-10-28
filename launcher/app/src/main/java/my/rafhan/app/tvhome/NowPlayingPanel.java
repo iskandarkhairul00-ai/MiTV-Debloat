@@ -56,14 +56,16 @@ import java.util.regex.Pattern;
  * media keys.
  */
 final class NowPlayingPanel {
-    /** Susunan butang kiri ke kanan: sebelumnya, main/jeda, seterusnya, buka app. */
-    static final int PREV = 0, PLAY_PAUSE = 1, NEXT = 2, OPEN = 3, BUTTONS = 4;
+    /** Susunan butang kiri ke kanan: mod main, sebelumnya, main/jeda, seterusnya, buka app. */
+    static final int MODE = 0, PREV = 1, PLAY_PAUSE = 2, NEXT = 3, OPEN = 4, BUTTONS = 5;
+    /** Mod main: 0 = ikut turutan (loop playlist), 1 = random, 2 = ulang lagu sama. */
+    private static final int MODE_COUNT = 3;
     private static final int TEXT = 0xFFFFFFFF, DIM = 0x8CFFFFFF, LIVE = 0xFFFF5A52;
     /** Cover is a square this size, and sets the card's height. */
     private static final int COVER = 88;
     private static final long DUMPSYS_EVERY_MS = 4000;
 
-    /** Lagu terakhir yang diketahui. Dibaca oleh screensaver untuk lirik. */
+    /** Lagu terakhir yang diketahui (dibaca juga oleh dashboard remote telefon). */
     static volatile Info last;
 
     interface Listener {
@@ -93,6 +95,7 @@ final class NowPlayingPanel {
     private final Bar bar;
     private final ImageView[] buttons = new ImageView[BUTTONS];
 
+    private int mode;
     private Info info;
     private boolean started, shown, visibleOnScreen = true;
     private volatile AdbKeys.Hid helper;
@@ -179,7 +182,8 @@ final class NowPlayingPanel {
         progress.addView(time);
         col.addView(progress, top(6));
 
-        int[] icons = {R.drawable.ic_previous, R.drawable.ic_pause, R.drawable.ic_next, R.drawable.ic_open};
+        mode = ctx.getSharedPreferences("now_playing", Context.MODE_PRIVATE).getInt("mode", 0) % MODE_COUNT;
+        int[] icons = {modeIcon(), R.drawable.ic_previous, R.drawable.ic_pause, R.drawable.ic_next, R.drawable.ic_open};
         for (int i = 0; i < BUTTONS; i++) {
             ImageView b = new ImageView(ctx);
             b.setImageResource(icons[i]);
@@ -200,7 +204,6 @@ final class NowPlayingPanel {
         started = true;
         generation++;
         adb.ensure();
-        if (info == null) showIdle(); // the card stays up, empty, until something plays
         main.post(dumpsysPoll); // the helper is only started once something is playing
     }
 
@@ -279,6 +282,12 @@ final class NowPlayingPanel {
             case NEXT:
                 media(am, KeyEvent.KEYCODE_MEDIA_NEXT);
                 break;
+            case MODE:
+                mode = (mode + 1) % MODE_COUNT;
+                ctx.getSharedPreferences("now_playing", Context.MODE_PRIVATE).edit().putInt("mode", mode).apply();
+                buttons[MODE].setImageResource(modeIcon());
+                sendMode(mode);
+                return;
             case OPEN:
                 PackageManager pm = ctx.getPackageManager();
                 Intent launch = pm.getLeanbackLaunchIntentForPackage(in.pkg);
@@ -298,6 +307,19 @@ final class NowPlayingPanel {
             main.removeCallbacks(dumpsysPoll);
             main.postDelayed(dumpsysPoll, 600);
         }
+    }
+
+    private int modeIcon() {
+        return mode == 1 ? R.drawable.ic_shuffle : mode == 2 ? R.drawable.ic_repeat_one : R.drawable.ic_repeat;
+    }
+
+    /**
+     * Hantar mod main ke app muzik. Android tiada kekunci media untuk shuffle/repeat, jadi ini
+     * perlu custom action MediaSession (sendCustomAction) melalui MediaHelper. Buat masa ini
+     * hanya ikon yang bertukar; sambungkan di sini bila nama custom action app tu diketahui.
+     */
+    private void sendMode(int mode) {
+        // TODO: hantar custom action (shuffle/repeat) ke sesi app yang sedang main.
     }
 
     private static void media(AudioManager am, int code) {
@@ -457,16 +479,6 @@ final class NowPlayingPanel {
         return best;
     }
 
-    static String stateLabel(int state) {
-        switch (state) {
-            case PlaybackState.STATE_PLAYING: return "Playing";
-            case PlaybackState.STATE_PAUSED: return "Paused";
-            case PlaybackState.STATE_BUFFERING:
-            case PlaybackState.STATE_CONNECTING: return "Loading";
-            default: return "Now playing";
-        }
-    }
-
     private static String blank(String s) {
         return s == null || s.isEmpty() || s.equals("null") ? null : s;
     }
@@ -490,12 +502,17 @@ final class NowPlayingPanel {
     private void show(Info i) {
         info = i;
         last = i;
+        // Last Watching card on home: remember what each app was last playing.
+        if (i != null) LastWatchPanel.record(ctx, i.pkg, i.title, i.artist);
         main.removeCallbacks(tick);
         if (i == null) {
-            boolean was = shown;
-            shown = false;
-            showIdle();
-            if (was) listener.onShownChanged(false);
+            coverKey = null;
+            helperArt = null;
+            if (shown) {
+                shown = false;
+                card.setVisibility(View.GONE);
+                listener.onShownChanged(false);
+            }
             return;
         }
         String label = appLabel(i.pkg);
@@ -521,8 +538,6 @@ final class NowPlayingPanel {
         buttons[PREV].setAlpha(supported(i.actions, ACTION_PREV) ? 1f : 0.35f);
         buttons[NEXT].setAlpha(supported(i.actions, ACTION_NEXT) ? 1f : 0.35f);
 
-        buttons[PLAY_PAUSE].setAlpha(1f);
-        buttons[OPEN].setAlpha(1f);
         if (!shown) {
             shown = true;
             card.setVisibility(View.VISIBLE);
@@ -530,23 +545,6 @@ final class NowPlayingPanel {
         }
         updateProgress();
         if (needsTick()) main.postDelayed(tick, 1000);
-    }
-
-    /** Nothing is playing: the card stays on the home screen, empty and dimmed. */
-    private void showIdle() {
-        coverKey = null;
-        helperArt = null;
-        source.setText("NOW PLAYING");
-        title.setText("Nothing playing");
-        artist.setVisibility(View.GONE);
-        cover.setPadding(0, 0, 0, 0);
-        cover.setImageDrawable(null);
-        bar.set(0f, TEXT);
-        time.setText("");
-        shownIcon = PLAY_ICON;
-        buttons[PLAY_PAUSE].setImageResource(PLAY_ICON);
-        for (ImageView b : buttons) b.setAlpha(0.35f);
-        card.setVisibility(View.VISIBLE);
     }
 
     private static boolean supported(long actions, long flag) {
@@ -602,6 +600,10 @@ final class NowPlayingPanel {
         labelPkg = pkg;
         labelText = l;
         return l;
+    }
+
+    /** Lirik sudah dibuang dari kad ini. Kaedah ini kekal kosong supaya kod lama yang memanggilnya masih dikompil. */
+    void setLyric(String line) {
     }
 
     // ---------------------------------------------------------------- progress
